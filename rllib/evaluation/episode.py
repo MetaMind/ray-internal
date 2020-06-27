@@ -154,10 +154,12 @@ class MultiAgentEpisode:
 
     def _add_agent_rewards(self, reward_dict):
         for agent_id, reward in reward_dict.items():
+            # Changed 'reward' to 'np.sum(reward)' for parallel processing of agents.
+            # The reward history still contains all the individual agents' rewards.
             if reward is not None:
                 self.agent_rewards[agent_id,
-                                   self.policy_for(agent_id)] += reward
-                self.total_reward += reward
+                                   self.policy_for(agent_id)] += np.sum(reward)
+                self.total_reward += np.sum(reward)
                 self._agent_reward_history[agent_id].append(reward)
 
     def _set_rnn_state(self, agent_id, rnn_state):

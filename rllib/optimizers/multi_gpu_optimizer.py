@@ -118,7 +118,8 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                                 policy._optimizer, self.devices,
                                 [v
                                  for _, v in policy._loss_inputs], rnn_inputs,
-                                self.per_device_batch_size, policy.copy))
+                                # self.per_device_batch_size, policy.copy))
+                                self.per_device_batch_size*100, policy.copy))  # SS** TODO: VERIFY
 
                 self.sess = self.workers.local_worker().tf_sess
                 self.sess.run(tf.global_variables_initializer())
@@ -130,6 +131,20 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 weights = ray.put(self.workers.local_worker().get_weights())
                 for e in self.workers.remote_workers():
                     e.set_weights.remote(weights)
+
+        # SS **
+        # import cProfile
+        # def local_run():
+        #     samples_local = []
+        #     while sum(s.count for s in samples_local) < self.train_batch_size:
+        #         samples_local.append(self.workers.local_worker().sample())
+        #
+        # cProfile.runctx("local_run()", locals(), globals(),
+        #                 "/Users/sunil.srinivasa/Desktop/profiles/"
+        #                 "sample_time_linear_model_all_agents_parallelized_local_iter_{}_10000trainingagents"
+        #                 .format(int(self.num_steps_sampled/10)))
+        # if self.num_steps_sampled == 30:
+        #     exit()
 
         with self.sample_timer:
             if self.workers.remote_workers():
@@ -181,6 +196,33 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     state_keys = policy._state_inputs + [policy._seq_lens]
                 else:
                     state_keys = []
+                
+                for key in tuples:
+                    # print("before", key.name, tuples[key].shape)
+                    # SS**
+                    # TODO: understand why planner action placeholders are of a different shape
+                    if "a/seq_lens" in key.name:
+                      #   print("type A")
+                        tuples[key] = np.repeat(tuples[key], 5)
+                    elif "advantages" in key.name or "value_targets" in key.name:
+                      #   print("type B")
+                        tuples[key] = tuples[key].reshape(-1, 1)
+                    elif policy_id == 'p' and "action" in key.name and "logp" not in key.name:
+                      #   print("type E")
+                        pass
+                    elif len(tuples[key].shape) == 2:
+                       #  print("type F")
+                        prod = np.product(tuples[key].shape[:2])
+                        tuples[key] = tuples[key].reshape(prod,)
+                    elif len(tuples[key].shape) > 2:
+                      #   print("type G")
+                        prod = np.product(tuples[key].shape[:-1])
+                        tuples[key] = tuples[key].reshape(prod, -1)
+                    else:
+                      #   print('type H')
+                        tuples[key] = np.array(tuples[key])
+                    # print("after", key.name, tuples[key].shape)
+                    
                 num_loaded_tuples[policy_id] = (
                     self.optimizers[policy_id].load_data(
                         self.sess, [tuples[k] for k in data_keys],
@@ -196,6 +238,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
+                    num_batches = 1 ## SS**
                     permutation = np.random.permutation(num_batches)
                     for batch_index in range(num_batches):
                         batch_fetches = optimizer.optimize(
@@ -203,6 +246,17 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                             self.per_device_batch_size)
                         for k, v in batch_fetches[LEARNER_STATS_KEY].items():
                             iter_extra_fetches[k].append(v)
+
+                    # def do_optimize(): ## SS** profiling optimizer
+                    #     for batch_index in range(num_batches):
+                    #         batch_fetches = optimizer.optimize(
+                    #             self.sess, permutation[batch_index] *
+                    #             self.per_device_batch_size)
+                    #         for k, v in batch_fetches[LEARNER_STATS_KEY].items():
+                    #             iter_extra_fetches[k].append(v)
+                    # import cProfile
+                    # cProfile.runctx("do_optimize()", locals(), globals(), "/users/sunil.srinivasa/Desktop/profiles/tmp")
+
                     logger.debug("{} {}".format(i,
                                                 averaged(iter_extra_fetches)))
                 fetches[policy_id] = averaged(iter_extra_fetches)

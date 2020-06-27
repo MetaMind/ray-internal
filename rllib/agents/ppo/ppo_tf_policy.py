@@ -1,9 +1,10 @@
 import logging
+import numpy as np ## SS**
 
 import ray
 from ray.rllib.agents.impala.vtrace_policy import BEHAVIOUR_LOGITS
 from ray.rllib.evaluation.postprocessing import compute_advantages, \
-    Postprocessing
+    Postprocessing, compute_advantages_vectorized  # SS**
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.policy import ACTION_LOGP
 from ray.rllib.policy.tf_policy import LearningRateSchedule, \
@@ -178,11 +179,15 @@ def postprocess_ppo_gae(policy,
     else:
         next_state = []
         for i in range(policy.num_state_tensors()):
-            next_state.append([sample_batch["state_out_{}".format(i)][-1]])
-        last_r = policy._value(sample_batch[SampleBatch.NEXT_OBS][-1],
-                               sample_batch[SampleBatch.ACTIONS][-1],
-                               sample_batch[SampleBatch.REWARDS][-1],
-                               *next_state)
+            next_state.append([sample_batch["state_out_{}".format(i)][-1].reshape(1, -1)])
+            
+        # SS**
+        import numpy as np
+        
+        last_r = policy._value(np.expand_dims(sample_batch[SampleBatch.NEXT_OBS][-1], 0).reshape(1, -1),
+                               np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(1, -1),
+                               np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(1, -1),
+                               *next_state).reshape(-1)
     batch = compute_advantages(
         sample_batch,
         last_r,
@@ -191,6 +196,47 @@ def postprocess_ppo_gae(policy,
         use_gae=policy.config["use_gae"])
     return batch
 
+
+# SS**
+def postprocess_ppo_gae_vectorized(policy,
+                                   sample_batch,
+                                   other_agent_batches=None,
+                                   episode=None):
+
+    if other_agent_batches is not None:
+        
+        # Perform post processing
+        agent_policy, agent_batch = other_agent_batches['a']
+        next_state = []
+        for i in range(agent_policy.num_state_tensors()):
+            next_state.append([agent_batch["state_out_{}".format(i)][-1]])
+
+        next_obs = agent_batch[SampleBatch.NEXT_OBS][-1]
+        actions = np.array(agent_batch[SampleBatch.ACTIONS][-1]).reshape(-1, 1)
+        rewards = np.array(agent_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
+        
+        next_state = [n[0][-1].reshape(-1, 32) for n in next_state]
+        # print("vectorized", [n.shape for n in next_state])
+        last_rs_vector = agent_policy._value(next_obs, actions, rewards, *next_state).reshape(-1)
+
+        agent_batches = compute_advantages_vectorized(
+            other_agent_batches,
+            last_rs_vector,
+            policy.config["gamma"],
+            policy.config["lambda"],
+            use_gae=policy.config["use_gae"])
+            
+        # Process 'p'
+        agent_batches['p'] = postprocess_ppo_gae(policy, sample_batch,
+                                                 other_agent_batches, episode)
+        return agent_batches
+    
+    else:
+        return postprocess_ppo_gae(policy,
+                                   sample_batch,
+                                   other_agent_batches,
+                                   episode)
+    
 
 def clip_gradients(policy, optimizer, loss):
     variables = policy.model.trainable_variables()
@@ -230,18 +276,18 @@ class ValueNetworkMixin:
     def __init__(self, obs_space, action_space, config):
         if config["use_gae"]:
 
-            @make_tf_callable(self.get_session())
+            @make_tf_callable(self.get_session(), True)
             def value(ob, prev_action, prev_reward, *state):
                 model_out, _ = self.model({
-                    SampleBatch.CUR_OBS: tf.convert_to_tensor([ob]),
+                    SampleBatch.CUR_OBS: tf.convert_to_tensor(ob),
                     SampleBatch.PREV_ACTIONS: tf.convert_to_tensor(
-                        [prev_action]),
+                        prev_action),
                     SampleBatch.PREV_REWARDS: tf.convert_to_tensor(
-                        [prev_reward]),
+                        prev_reward),
                     "is_training": tf.convert_to_tensor(False),
                 }, [tf.convert_to_tensor([s]) for s in state],
                                           tf.convert_to_tensor([1]))
-                return self.model.value_function()[0]
+                return self.model.value_function()
 
         else:
 
@@ -271,7 +317,7 @@ PPOTFPolicy = build_tf_policy(
     loss_fn=ppo_surrogate_loss,
     stats_fn=kl_and_loss_stats,
     extra_action_fetches_fn=vf_preds_and_logits_fetches,
-    postprocess_fn=postprocess_ppo_gae,
+    postprocess_fn=postprocess_ppo_gae_vectorized,  # SS**
     gradients_fn=clip_gradients,
     before_init=setup_config,
     before_loss_init=setup_mixins,
