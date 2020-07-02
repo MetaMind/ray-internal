@@ -140,6 +140,7 @@ class MultiAgentSampleBatchBuilder:
         if self.clip_rewards:
             for _, (_, pre_batch) in pre_batches.items():
                 pre_batch["rewards"] = np.sign(pre_batch["rewards"])
+        
         # SS**
         (_, pre_batch) = pre_batches['p']
         other_batches = pre_batches.copy()

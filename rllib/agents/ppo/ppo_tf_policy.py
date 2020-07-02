@@ -178,16 +178,17 @@ def postprocess_ppo_gae(policy,
         last_r = 0.0
     else:
         next_state = []
+        # SS** Add dummy dimension 0 to make work with the value function call
         for i in range(policy.num_state_tensors()):
             next_state.append([sample_batch["state_out_{}".format(i)][-1].reshape(1, -1)])
-            
-        # SS**
-        import numpy as np
-        
-        last_r = policy._value(np.expand_dims(sample_batch[SampleBatch.NEXT_OBS][-1], 0).reshape(1, -1),
+        last_r = policy._value(sample_batch[SampleBatch.NEXT_OBS][-1].reshape(1, -1),
                                np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(1, -1),
                                np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(1, -1),
-                               *next_state).reshape(-1)
+                               *next_state)
+        
+        print("LAST_R_PLANNER", last_r)
+        
+    # print("LAST_R_PLANNER", last_r)
     batch = compute_advantages(
         sample_batch,
         last_r,
@@ -197,7 +198,7 @@ def postprocess_ppo_gae(policy,
     return batch
 
 
-# SS**
+# SS** parallelized version of postprocess_ppo_gae()
 def postprocess_ppo_gae_vectorized(policy,
                                    sample_batch,
                                    other_agent_batches=None,
@@ -211,13 +212,24 @@ def postprocess_ppo_gae_vectorized(policy,
         for i in range(agent_policy.num_state_tensors()):
             next_state.append([agent_batch["state_out_{}".format(i)][-1]])
 
+        # Ensure all inputs are 2-D
         next_obs = agent_batch[SampleBatch.NEXT_OBS][-1]
         actions = np.array(agent_batch[SampleBatch.ACTIONS][-1]).reshape(-1, 1)
         rewards = np.array(agent_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
         
-        next_state = [n[0][-1].reshape(-1, 32) for n in next_state]
-        # print("vectorized", [n.shape for n in next_state])
-        last_rs_vector = agent_policy._value(next_obs, actions, rewards, *next_state).reshape(-1)
+        print("OTHER INPUTS", actions, rewards)
+        
+        next_state = [n[0][0].reshape(-1, 32) for n in next_state]
+        
+        # print("NS",  next_state)
+        # print(next_obs.shape, actions.shape, rewards.shape, np.array(next_state).shape)
+        last_rs_vector = agent_policy._value(next_obs, actions, rewards, *next_state)
+        print("LAST_RS_AGENT", last_rs_vector)
+        # exit()
+        
+        # print(last_rs_vector)
+        # print(last_rs_vector.shape)
+        last_rs_vector = last_rs_vector.reshape(-1)
 
         agent_batches = compute_advantages_vectorized(
             other_agent_batches,
@@ -226,7 +238,7 @@ def postprocess_ppo_gae_vectorized(policy,
             policy.config["lambda"],
             use_gae=policy.config["use_gae"])
             
-        # Process 'p'
+        # Process 'p' using the original routine
         agent_batches['p'] = postprocess_ppo_gae(policy, sample_batch,
                                                  other_agent_batches, episode)
         return agent_batches
@@ -275,9 +287,10 @@ class KLCoeffMixin:
 class ValueNetworkMixin:
     def __init__(self, obs_space, action_space, config):
         if config["use_gae"]:
-
-            @make_tf_callable(self.get_session(), True)
-            def value(ob, prev_action, prev_reward, *state):
+            # SS** Add dynamic_shape=True to add the number of agents' dimension
+            # SS** removed the [0] from the output as the output will be a vector
+            @make_tf_callable(self.get_session(), dynamic_shape=True)
+            def value(ob, prev_action, prev_reward, *state, seq_lens=[1]):
                 model_out, _ = self.model({
                     SampleBatch.CUR_OBS: tf.convert_to_tensor(ob),
                     SampleBatch.PREV_ACTIONS: tf.convert_to_tensor(
@@ -285,8 +298,8 @@ class ValueNetworkMixin:
                     SampleBatch.PREV_REWARDS: tf.convert_to_tensor(
                         prev_reward),
                     "is_training": tf.convert_to_tensor(False),
-                }, [tf.convert_to_tensor([s]) for s in state],
-                                          tf.convert_to_tensor([1]))
+                }, [tf.convert_to_tensor(s) for s in state],
+                                          tf.convert_to_tensor(seq_lens))
                 return self.model.value_function()
 
         else:

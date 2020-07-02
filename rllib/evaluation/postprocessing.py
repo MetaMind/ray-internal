@@ -48,7 +48,7 @@ def compute_advantages(rollout,
         "use_critic=True but values not found"
     assert use_critic or not use_gae, \
         "Can't use gae without using a value function"
-    
+
     if use_gae:
         if len(rollout[SampleBatch.VF_PREDS].shape) == len(np.array(last_r).shape)+1:
             last_r = [last_r]
@@ -81,10 +81,16 @@ def compute_advantages(rollout,
                 traj[Postprocessing.ADVANTAGES])
 
     traj[Postprocessing.ADVANTAGES] = traj[
-        Postprocessing.ADVANTAGES].copy().astype(np.float32)
+        Postprocessing.ADVANTAGES].copy().astype(np.float32).reshape(-1)
+    traj[Postprocessing.VALUE_TARGETS] = traj[Postprocessing.VALUE_TARGETS].reshape(-1)
 
     assert all(val.shape[0] == trajsize for val in traj.values()), \
         "Rollout stacked incorrectly!"
+
+    # print("PLANNER")
+    # for key in traj:
+    #     print(key, traj[key])
+    #     print("\n\n")
     
     return SampleBatch(traj)
 
@@ -163,10 +169,14 @@ def compute_advantages_vectorized(agent_batches,
     
     assert all(val.shape[0] == trajsize for val in traj.values()), \
         "Rollout stacked incorrectly!"
-        
-    # # Merge the batch and n_agents axes
+    
+    # print("AGENTS")
     # for key in traj:
-    #     print("before", key, traj[key].shape)
+    #     print(key, traj[key])
+    # print("\n\n")
+    
+    # for key in traj:
+    #     print("before_pp", key, traj[key].shape)
     #     # SS**
     #     if len(traj[key].shape) == 2:
     #         print("type F")
@@ -179,7 +189,7 @@ def compute_advantages_vectorized(agent_batches,
     #     else:
     #         print('type H')
     #         traj[key] = np.array(traj[key])
-    #     print("after", key, traj[key].shape)
+    #     print("after_pp", key, traj[key].shape)
 
     return {agent_ids[0]: SampleBatch(traj)}
     

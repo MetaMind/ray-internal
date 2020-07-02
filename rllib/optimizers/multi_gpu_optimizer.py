@@ -198,31 +198,21 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     state_keys = []
                 
                 for key in tuples:
-                    # print("before", key.name, tuples[key].shape)
-                    # SS**
-                    # TODO: understand why planner action placeholders are of a different shape
-                    if "a/seq_lens" in key.name:
-                      #   print("type A")
-                        tuples[key] = np.repeat(tuples[key], 5)
-                    elif "advantages" in key.name or "value_targets" in key.name:
-                      #   print("type B")
-                        tuples[key] = tuples[key].reshape(-1, 1)
-                    elif policy_id == 'p' and "action" in key.name and "logp" not in key.name:
-                      #   print("type E")
-                        pass
-                    elif len(tuples[key].shape) == 2:
-                       #  print("type F")
-                        prod = np.product(tuples[key].shape[:2])
-                        tuples[key] = tuples[key].reshape(prod,)
-                    elif len(tuples[key].shape) > 2:
-                      #   print("type G")
-                        prod = np.product(tuples[key].shape[:-1])
-                        tuples[key] = tuples[key].reshape(prod, -1)
-                    else:
-                      #   print('type H')
-                        tuples[key] = np.array(tuples[key])
-                    # print("after", key.name, tuples[key].shape)
-                    
+                    # Blending the batch and n_agent axes
+                    if policy_id == 'a':
+                            # batch_size, n_agents =
+                        if "a/seq_lens" in key.name:  # TODO: Fix the hard-coding
+                            n_agents = 3
+                            tuples[key] = np.repeat(tuples[key], n_agents)
+                        elif len(tuples[key].shape) == 2:
+                            prod = np.product(tuples[key].shape[:2])
+                            tuples[key] = tuples[key].reshape(prod,)
+                        elif len(tuples[key].shape) > 2:
+                            prod = np.product(tuples[key].shape[:-1])
+                            tuples[key] = tuples[key].reshape(prod, -1)
+                        else:
+                            tuples[key] = np.array(tuples[key])
+                
                 num_loaded_tuples[policy_id] = (
                     self.optimizers[policy_id].load_data(
                         self.sess, [tuples[k] for k in data_keys],
