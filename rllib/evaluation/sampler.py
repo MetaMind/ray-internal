@@ -440,9 +440,10 @@ def _process_observations(base_env, policies, batch_builder_pool,
             policy_id = episode.policy_for(agent_id)
             if agent_id != '0':  # TODO: Fix the hard-code
                 if agent_id == 'a':  # TODO: Hard-coded
-                    # Set the total number of logical agents
-                    num_agents = raw_obs['private'].shape[-1]  # TODO: Hard-coded
-    
+                    # Get the total number of logical agents from one of the keys
+                    for key in raw_obs:
+                        num_agents = raw_obs[key].shape[-1]
+                        break
                     # Pre-processing all the agents' observations at once!
                     # TODO: Can the DictFlatteningPreprocessor be reused instead?
                     raw_obs = OrderedDict(sorted(raw_obs.items()))
@@ -450,10 +451,8 @@ def _process_observations(base_env, policies, batch_builder_pool,
                     for key in raw_obs.keys():
                         if key != 'action_mask':
                             flattened_obs = np.vstack((flattened_obs, raw_obs[key].reshape(-1, num_agents)))
-                    flattened_obs = np.transpose(flattened_obs).reshape(num_agents,
-    -1)
-                    repeated_mask = np.repeat(raw_obs['action_mask'],
-                                              num_agents).reshape(num_agents, -1)
+                    flattened_obs = np.transpose(flattened_obs).reshape(num_agents, -1)
+                    repeated_mask = raw_obs['action_mask'].reshape(num_agents, -1)
         
                     prep_obs = np.hstack((repeated_mask, flattened_obs))
         
@@ -466,11 +465,17 @@ def _process_observations(base_env, policies, batch_builder_pool,
                             rnn_states = np.repeat(np.array(rnn_states)[:, np.newaxis, :],
                                                    num_agents, axis=1)
                             episode._set_rnn_state(agent_id, rnn_states)
+                    
+                    # Setting the prev rewards
+                    prev_rewards = episode.prev_reward_for(agent_id)
+                    if isinstance(prev_rewards, float) or len(prev_rewards) != num_agents:
+                        prev_rewards = [0.0 for _ in range(num_agents)]
                 else:
                     prep_obs = _get_or_raise(preprocessors,
                                              policy_id).transform(raw_obs)
                     if rewards[env_id][agent_id] is None:
                         rewards[env_id][agent_id] = 0.0
+                    prev_rewards = episode.prev_reward_for(agent_id)
                 
                 if log_once("prep_obs"):
                     logger.info("Preprocessed obs: {}".format(summarize(prep_obs)))
@@ -506,7 +511,7 @@ def _process_observations(base_env, policies, batch_builder_pool,
                         actions=episode.last_action_for(agent_id),
                         rewards=rewards[env_id][agent_id],
                         prev_actions=episode.prev_action_for(agent_id),
-                        prev_rewards=episode.prev_reward_for(agent_id),
+                        prev_rewards=prev_rewards,
                         dones=(False if (no_done_at_end
                                          or (hit_horizon and soft_horizon)) else
                                agent_done),
@@ -631,7 +636,8 @@ def _do_policy_eval(tf_sess, to_eval, policies, active_episodes):
 
                 obs_len = eval_data[0].obs.shape[-1]
                 obs_batch = np.array(obs_batch).reshape(-1, obs_len)
-                prev_action_batch = np.array(prev_action_batch).reshape(-1)
+                action_dim = 6
+                prev_action_batch = np.array(prev_action_batch).reshape(-1, action_dim) # TODO
                 # Flatten prev_reward_batch to a list
                 prev_reward_batch = [val for sublist in prev_reward_batch for val in sublist]
 
@@ -705,27 +711,35 @@ def _process_policy_eval_results(to_eval, eval_results, active_episodes,
         policy = _get_or_raise(policies, policy_id)
         # Set the number of logical actions for each policy id
         if policy_id == 'a':
-            num_actions = eval_data[0].obs.shape[0]
-            actions = actions.reshape(-1, num_actions)
+            num_agents = eval_data[0].obs.shape[0]
+            action_dim = 6  # TODO: get action dim in here
+            actions = actions.reshape(-1, num_agents, action_dim)
         for i, action in enumerate(actions):
             env_id = eval_data[i].env_id
             agent_id = eval_data[i].agent_id
-            if clip_actions:
-                actions_to_send[env_id][agent_id] = clip_action(
-                    action, policy.action_space)
-            else:
-                actions_to_send[env_id][agent_id] = action
             episode = active_episodes[env_id]
             if agent_id == 'a':
                 episode._set_rnn_state(agent_id, [c[i*num_actions:(i+1)*num_actions] for c in rnn_out_cols])
                 episode._set_last_pi_info(
                     agent_id, {k: v[i*num_actions:(i+1)*num_actions]
                                for k, v in pi_info_cols.items()})
+                if clip_actions:
+                    for agent_idx in range(num_agents):
+                        actions_to_send[env_id][str(agent_idx)] = clip_action(
+                            action[agent_idx], policy.action_space)
+                else:
+                    for agent_idx in range(num_agents):
+                        actions_to_send[env_id][str(agent_id)] = action[agent_idx]
             else:
                 episode._set_rnn_state(agent_id, [c[i] for c in rnn_out_cols])
                 episode._set_last_pi_info(
                     agent_id, {k: v[i]
                                for k, v in pi_info_cols.items()})
+                if clip_actions:
+                    actions_to_send[env_id][agent_id] = clip_action(
+                        action, policy.action_space)
+                else:
+                    actions_to_send[env_id][agent_id] = action
             if env_id in off_policy_actions and \
                     agent_id in off_policy_actions[env_id]:
                 episode._set_last_action(agent_id,

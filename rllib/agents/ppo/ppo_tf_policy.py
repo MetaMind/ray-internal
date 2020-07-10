@@ -185,9 +185,6 @@ def postprocess_ppo_gae(policy,
                                np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(1, -1),
                                np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(1, -1),
                                *next_state)
-        
-        print("LAST_R_PLANNER", last_r)
-        
     # print("LAST_R_PLANNER", last_r)
     batch = compute_advantages(
         sample_batch,
@@ -214,21 +211,16 @@ def postprocess_ppo_gae_vectorized(policy,
 
         # Ensure all inputs are 2-D
         next_obs = agent_batch[SampleBatch.NEXT_OBS][-1]
-        actions = np.array(agent_batch[SampleBatch.ACTIONS][-1]).reshape(-1, 1)
+        action_dim = 6  # TODO: Set action space dim
+        actions = np.array(agent_batch[SampleBatch.ACTIONS][-1]).reshape(-1, action_dim)
         rewards = np.array(agent_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
+        state_dim = 128  # TODO: Set lstm cell size here
+        next_state = [n[0][0].reshape(-1, state_dim) for n in next_state]
+        # TODO: n[0][0] or something else (e.g., n[i][i]) above. CHECK
         
-        print("OTHER INPUTS", actions, rewards)
-        
-        next_state = [n[0][0].reshape(-1, 32) for n in next_state]
-        
-        # print("NS",  next_state)
-        # print(next_obs.shape, actions.shape, rewards.shape, np.array(next_state).shape)
         last_rs_vector = agent_policy._value(next_obs, actions, rewards, *next_state)
-        print("LAST_RS_AGENT", last_rs_vector)
-        # exit()
+        # print("LAST_RS_AGENT", last_rs_vector)
         
-        # print(last_rs_vector)
-        # print(last_rs_vector.shape)
         last_rs_vector = last_rs_vector.reshape(-1)
 
         agent_batches = compute_advantages_vectorized(

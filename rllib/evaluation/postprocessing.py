@@ -56,7 +56,7 @@ def compute_advantages(rollout,
             [rollout[SampleBatch.VF_PREDS],
              np.array(last_r)])  # SS** -> changed [last_r] to last_r
         delta_t = (
-            traj[SampleBatch.REWARDS].reshape(-1, 1) + gamma * vpred_t[1:] - vpred_t[:-1]) # SS** -> added reshape
+            traj[SampleBatch.REWARDS] + gamma * vpred_t[1:] - vpred_t[:-1])
         # This formula for the advantage comes from:
         # "Generalized Advantage Estimation": https://arxiv.org/abs/1506.02438
         traj[Postprocessing.ADVANTAGES] = discount(delta_t, gamma * lambda_)
@@ -88,8 +88,8 @@ def compute_advantages(rollout,
         "Rollout stacked incorrectly!"
 
     # print("PLANNER")
-    # for key in traj:
-    #     print(key, traj[key])
+    # for key. val in traj.items():
+    #     print(key, val.shape)
     #     print("\n\n")
     
     return SampleBatch(traj)
@@ -171,26 +171,10 @@ def compute_advantages_vectorized(agent_batches,
         "Rollout stacked incorrectly!"
     
     # print("AGENTS")
-    # for key in traj:
-    #     print(key, traj[key])
+    # for key, val in traj.items():
+    #     print(key, val.shape)
     # print("\n\n")
     
-    # for key in traj:
-    #     print("before_pp", key, traj[key].shape)
-    #     # SS**
-    #     if len(traj[key].shape) == 2:
-    #         print("type F")
-    #         prod = np.product(traj[key].shape[:2])
-    #         traj[key] = traj[key].reshape(prod, )
-    #     elif len(traj[key].shape) > 2:
-    #         print("type G")
-    #         prod = np.product(traj[key].shape[:-1])
-    #         traj[key] = traj[key].reshape(prod, -1)
-    #     else:
-    #         print('type H')
-    #         traj[key] = np.array(traj[key])
-    #     print("after_pp", key, traj[key].shape)
-
     return {agent_ids[0]: SampleBatch(traj)}
     
     # return {agent_id: SampleBatch(sample_batches[agent_id]) for agent_id in agent_ids}

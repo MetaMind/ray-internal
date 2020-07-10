@@ -202,7 +202,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     if policy_id == 'a':
                             # batch_size, n_agents =
                         if "a/seq_lens" in key.name:  # TODO: Fix the hard-coding
-                            n_agents = 3
+                            n_agents = 51
                             tuples[key] = np.repeat(tuples[key], n_agents)
                         elif len(tuples[key].shape) == 2:
                             prod = np.product(tuples[key].shape[:2])
