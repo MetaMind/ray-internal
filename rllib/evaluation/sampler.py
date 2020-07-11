@@ -568,22 +568,57 @@ def _process_observations(base_env, policies, batch_builder_pool,
                 # Creates a new episode if this is not async return
                 # If reset is async, we will get its result in some future poll
                 episode = active_episodes[env_id]
+                # For each agent in the environment, except the dummy agent '0'.
+                # Treat the collated agents as a single agent!
                 for agent_id, raw_obs in resetted_obs.items():
                     policy_id = episode.policy_for(agent_id)
                     policy = _get_or_raise(policies, policy_id)
-                    prep_obs = _get_or_raise(preprocessors,
-                                             policy_id).transform(raw_obs)
-                    filtered_obs = _get_or_raise(obs_filters,
-                                                 policy_id)(prep_obs)
-                    episode._set_last_observation(agent_id, filtered_obs)
-                    to_eval[policy_id].append(
-                        PolicyEvalData(
-                            env_id, agent_id, filtered_obs,
-                            episode.last_info_for(agent_id) or {},
-                            episode.rnn_state_for(agent_id),
-                            np.zeros_like(
-                                _flatten_action(policy.action_space.sample())),
-                            0.0))
+                    if agent_id != '0':  # TODO: Fix the hard-code
+                        if agent_id == 'a':  # TODO: Hard-coded
+            
+                            # Get the total number of logical agents from one of the keys
+                            for key in raw_obs:
+                                num_agents = raw_obs[key].shape[-1]
+                                break
+            
+                            # Pre-processing all the agents' observations at once!
+                            # TODO: Can the DictFlatteningPreprocessor be reused instead?
+                            raw_obs = OrderedDict(sorted(raw_obs.items()))
+                            flattened_obs = np.array([]).reshape(0, num_agents)
+                            for key in raw_obs.keys():
+                                if key != 'action_mask':
+                                    flattened_obs = np.vstack((flattened_obs,
+                                                               raw_obs[key].reshape(-1,
+                                                                                    num_agents)))
+                            flattened_obs = np.transpose(flattened_obs).reshape(
+                                num_agents, -1)
+                            repeated_mask = raw_obs['action_mask'].reshape(num_agents,
+                                                                           -1)
+
+                            prep_obs = np.hstack((repeated_mask, flattened_obs))
+            
+                            rnn_states = episode.rnn_state_for(agent_id)
+                            if len(rnn_states) > 0:
+                                rnn_states = np.repeat(
+                                    np.array(rnn_states)[:, np.newaxis, :],
+                                    num_agents, axis=1)
+                                episode._set_rnn_state(agent_id, rnn_states)
+                        else:
+                            prep_obs = _get_or_raise(preprocessors,
+                                                     policy_id).transform(raw_obs)
+                            if rewards[env_id][agent_id] is None:
+                                rewards[env_id][agent_id] = 0.0
+        
+                        filtered_obs = _get_or_raise(obs_filters, policy_id)(prep_obs)
+                        episode._set_last_observation(agent_id, filtered_obs)
+                        
+                        to_eval[policy_id].append(
+                            PolicyEvalData(env_id, agent_id, filtered_obs,
+                                           episode.last_info_for(agent_id) or {},
+                                           episode.rnn_state_for(agent_id),
+                                           np.zeros_like(
+                                               _flatten_action(policy.action_space.sample())),
+                                           np.zeros_like(rewards[env_id][agent_id])))
 
     return active_envs, to_eval, outputs
 
@@ -636,8 +671,8 @@ def _do_policy_eval(tf_sess, to_eval, policies, active_episodes):
 
                 obs_len = eval_data[0].obs.shape[-1]
                 obs_batch = np.array(obs_batch).reshape(-1, obs_len)
-                action_dim = 6
-                prev_action_batch = np.array(prev_action_batch).reshape(-1, action_dim) # TODO
+                action_dim = len(policy.action_space.sample())
+                prev_action_batch = np.array(prev_action_batch).reshape(-1, action_dim)
                 # Flatten prev_reward_batch to a list
                 prev_reward_batch = [val for sublist in prev_reward_batch for val in sublist]
 
@@ -712,16 +747,17 @@ def _process_policy_eval_results(to_eval, eval_results, active_episodes,
         # Set the number of logical actions for each policy id
         if policy_id == 'a':
             num_agents = eval_data[0].obs.shape[0]
-            action_dim = 6  # TODO: get action dim in here
+            action_dim = len(policy.action_space.sample())
             actions = actions.reshape(-1, num_agents, action_dim)
+
         for i, action in enumerate(actions):
             env_id = eval_data[i].env_id
             agent_id = eval_data[i].agent_id
             episode = active_episodes[env_id]
             if agent_id == 'a':
-                episode._set_rnn_state(agent_id, [c[i*num_actions:(i+1)*num_actions] for c in rnn_out_cols])
+                episode._set_rnn_state(agent_id, [c[i*num_agents:(i+1)*num_agents] for c in rnn_out_cols])
                 episode._set_last_pi_info(
-                    agent_id, {k: v[i*num_actions:(i+1)*num_actions]
+                    agent_id, {k: v[i*num_agents:(i+1)*num_agents]
                                for k, v in pi_info_cols.items()})
                 if clip_actions:
                     for agent_idx in range(num_agents):

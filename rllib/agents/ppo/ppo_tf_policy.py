@@ -211,7 +211,7 @@ def postprocess_ppo_gae_vectorized(policy,
 
         # Ensure all inputs are 2-D
         next_obs = agent_batch[SampleBatch.NEXT_OBS][-1]
-        action_dim = 6  # TODO: Set action space dim
+        action_dim = len(agent_policy.action_space.sample())
         actions = np.array(agent_batch[SampleBatch.ACTIONS][-1]).reshape(-1, action_dim)
         rewards = np.array(agent_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
         state_dim = 128  # TODO: Set lstm cell size here
