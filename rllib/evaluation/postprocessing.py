@@ -97,7 +97,7 @@ def compute_advantages(rollout,
 
 # SS** Use stack to compute advantages in a vectorized manner
 @DeveloperAPI
-def compute_advantages_vectorized(agent_batches,
+def compute_advantages_vectorized(rollouts,
                                   last_rs,
                                   gamma=0.9,
                                   lambda_=1.0,
@@ -107,7 +107,7 @@ def compute_advantages_vectorized(agent_batches,
     Given a set of rollouts, compute their value targets and the advantage.
 
     Args:
-        agent_batches (Dict(policy, SampleBatch)): a set of agent trajectories
+        rollouts (SampleBatch): SampleBatch of agent trajectories
         last_rs (float): Value estimations for last observation
         gamma (float): Discount factor.
         lambda_ (float): Parameter for GAE
@@ -120,21 +120,17 @@ def compute_advantages_vectorized(agent_batches,
             processed rewards.
     """
     traj = {}
-    agent_ids = ['a']
-    rollout = agent_batches['a'][1]
-    trajsize = len(rollout[SampleBatch.ACTIONS])
-    rollout_keys = rollout.keys()
+    trajsize = len(rollouts[SampleBatch.ACTIONS])
+    for key in rollouts:
+        traj[key] = np.stack(rollouts[key])
 
-    assert SampleBatch.VF_PREDS in rollout or not use_critic, \
+    assert SampleBatch.VF_PREDS in rollouts or not use_critic, \
         "use_critic=True but values not found"
     assert use_critic or not use_gae, \
         "Can't use gae without using a value function"
-    
-    for key in rollout_keys:
-        traj[key] = rollout[key]
-        
+
     if use_gae:
-        if len(rollout[SampleBatch.VF_PREDS].shape) == len(np.array(last_rs).shape) + 1:
+        if len(rollouts[SampleBatch.VF_PREDS].shape) == len(np.array(last_rs).shape) + 1:
             last_rs = [last_rs]
             
         vpred_t = np.concatenate((traj[SampleBatch.VF_PREDS],
@@ -175,6 +171,4 @@ def compute_advantages_vectorized(agent_batches,
     #     print(key, val.shape)
     # print("\n\n")
     
-    return {agent_ids[0]: SampleBatch(traj)}
-    
-    # return {agent_id: SampleBatch(sample_batches[agent_id]) for agent_id in agent_ids}
+    return SampleBatch(traj)

@@ -179,6 +179,7 @@ def postprocess_ppo_gae(policy,
     else:
         next_state = []
         # SS** Add dummy dimension 0 to make work with the value function call
+        # TODO(sunil): Are the reshapes necessary?
         for i in range(policy.num_state_tensors()):
             next_state.append([sample_batch["state_out_{}".format(i)][-1].reshape(1, -1)])
         last_r = policy._value(sample_batch[SampleBatch.NEXT_OBS][-1].reshape(1, -1),
@@ -201,39 +202,37 @@ def postprocess_ppo_gae_vectorized(policy,
                                    other_agent_batches=None,
                                    episode=None):
 
-    if other_agent_batches is not None:
-        
-        # Perform post processing
-        agent_policy, agent_batch = other_agent_batches['a']
-        next_state = []
-        for i in range(agent_policy.num_state_tensors()):
-            next_state.append([agent_batch["state_out_{}".format(i)][-1]])
-
-        # Ensure all inputs are 2-D
-        next_obs = agent_batch[SampleBatch.NEXT_OBS][-1]
-        action_dim = len(agent_policy.action_space.sample())
-        actions = np.array(agent_batch[SampleBatch.ACTIONS][-1]).reshape(-1, action_dim)
-        rewards = np.array(agent_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
-        state_dim = 128  # TODO: Set lstm cell size here
-        next_state = [n[0][0].reshape(-1, state_dim) for n in next_state]
-        # TODO: n[0][0] or something else (e.g., n[i][i]) above. CHECK
-        
-        last_rs_vector = agent_policy._value(next_obs, actions, rewards, *next_state)
-        # print("LAST_RS_AGENT", last_rs_vector)
-        
-        last_rs_vector = last_rs_vector.reshape(-1)
-
-        agent_batches = compute_advantages_vectorized(
-            other_agent_batches,
-            last_rs_vector,
+    if other_agent_batches is not None and 'p' in other_agent_batches: # TODO(sunil): 'p' is hard-coded!
+        num_agents = len(sample_batch[SampleBatch.REWARDS][-1])
+        completed = sample_batch["dones"][-1]
+        if completed:
+            last_rs = [0.0 for _ in range(num_agents)]
+        else:
+            # Perform post processing
+            next_state = []
+            for i in range(policy.num_state_tensors()):
+                next_state.append([sample_batch["state_out_{}".format(i)][-1]])
+    
+            # Ensure all inputs are 2-D
+            next_obs = sample_batch[SampleBatch.NEXT_OBS][-1]
+            action_dim = len(policy.action_space.sample())
+            actions = np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(-1, action_dim)
+            rewards = np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
+            last_rs = policy._value(next_obs, actions, rewards, *next_state)
+            
+            # TODO(sunil) - CHECK math!
+            num_agents = rewards.shape[0]
+            last_rs = last_rs[0:num_agents:]
+            # print("LAST_RS_AGENT", last_rs_vector)
+            
+        agent_batch = compute_advantages_vectorized(
+            sample_batch,
+            last_rs,
             policy.config["gamma"],
             policy.config["lambda"],
             use_gae=policy.config["use_gae"])
             
-        # Process 'p' using the original routine
-        agent_batches['p'] = postprocess_ppo_gae(policy, sample_batch,
-                                                 other_agent_batches, episode)
-        return agent_batches
+        return agent_batch
     
     else:
         return postprocess_ppo_gae(policy,
