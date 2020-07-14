@@ -212,34 +212,39 @@ def postprocess_ppo_gae_vectorized(policy,
             next_state = []
             for i in range(policy.num_state_tensors()):
                 next_state.append([sample_batch["state_out_{}".format(i)][-1]])
-    
+
             # Ensure all inputs are 2-D
             next_obs = sample_batch[SampleBatch.NEXT_OBS][-1]
-            action_dim = len(policy.action_space.sample())
+            # Compute action dimension for Discrete and MultiDiscrete action spaces
+            random_action = policy.action_space.sample()
+            if isinstance(random_action, int):
+                action_dim = 1
+            elif isinstance(random_action, list):
+                action_dim = len(random_action)
             actions = np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(-1, action_dim)
             rewards = np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
             last_rs = policy._value(next_obs, actions, rewards, *next_state)
-            
+
             # TODO(sunil) - CHECK math!
             num_agents = rewards.shape[0]
             last_rs = last_rs[0:num_agents:]
             # print("LAST_RS_AGENT", last_rs_vector)
-            
+
         agent_batch = compute_advantages_vectorized(
             sample_batch,
             last_rs,
             policy.config["gamma"],
             policy.config["lambda"],
             use_gae=policy.config["use_gae"])
-            
+
         return agent_batch
-    
+
     else:
         return postprocess_ppo_gae(policy,
                                    sample_batch,
                                    other_agent_batches,
                                    episode)
-    
+
 
 def clip_gradients(policy, optimizer, loss):
     variables = policy.model.trainable_variables()

@@ -671,8 +671,13 @@ def _do_policy_eval(tf_sess, to_eval, policies, active_episodes):
 
                 obs_len = eval_data[0].obs.shape[-1]
                 obs_batch = np.array(obs_batch).reshape(-1, obs_len)
-                action_dim = len(policy.action_space.sample())
-                prev_action_batch = np.array(prev_action_batch).reshape(-1, action_dim)
+                # Handle Discrete and MultiDiscrete action space cases
+                random_action = policy.action_space.sample()
+                if isinstance(random_action, int):
+                    prev_action_batch = np.array(prev_action_batch).reshape(-1)
+                elif isinstance(random_action, list):
+                    action_dim = len(random_action)
+                    prev_action_batch = np.array(prev_action_batch).reshape(-1, action_dim)
                 # Flatten prev_reward_batch to a list
                 prev_reward_batch = [val for sublist in prev_reward_batch for val in sublist]
 
@@ -747,8 +752,13 @@ def _process_policy_eval_results(to_eval, eval_results, active_episodes,
         # Set the number of logical actions for each policy id
         if policy_id == 'a':
             num_agents = eval_data[0].obs.shape[0]
-            action_dim = len(policy.action_space.sample())
-            actions = actions.reshape(-1, num_agents, action_dim)
+            # Handle Discrete and MultiDiscrete action space cases
+            random_action = policy.action_space.sample()
+            if isinstance(random_action, int):
+                actions = actions.reshape(-1, num_agents)
+            elif isinstance(random_action, list):
+                action_dim = len(random_action)
+                actions = actions.reshape(-1, num_agents, action_dim)
 
         for i, action in enumerate(actions):
             env_id = eval_data[i].env_id
@@ -782,6 +792,7 @@ def _process_policy_eval_results(to_eval, eval_results, active_episodes,
                                          off_policy_actions[env_id][agent_id])
             else:
                 episode._set_last_action(agent_id, action)
+
     return actions_to_send
 
 

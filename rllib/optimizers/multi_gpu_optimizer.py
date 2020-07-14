@@ -196,13 +196,15 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     state_keys = policy._state_inputs + [policy._seq_lens]
                 else:
                     state_keys = []
-                
+
                 for key in tuples:
                     # Blending the batch and n_agent axes
                     if policy_id == 'a':
-                            # batch_size, n_agents =
-                        if "a/seq_lens" in key.name:  # TODO: Fix the hard-coding
-                            n_agents = 51
+                        if "observation" in key.name:
+                            # Figure out number of agents
+                            batch_size, n_agents, feature_size = tuples[key].shape
+                        if "seq_lens" in key.name:
+                            # TODO(sunil): Set this elsewhere?
                             tuples[key] = np.repeat(tuples[key], n_agents)
                         elif len(tuples[key].shape) == 2:
                             prod = np.product(tuples[key].shape[:2])
@@ -212,7 +214,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                             tuples[key] = tuples[key].reshape(prod, -1)
                         else:
                             tuples[key] = np.array(tuples[key])
-                
+
                 num_loaded_tuples[policy_id] = (
                     self.optimizers[policy_id].load_data(
                         self.sess, [tuples[k] for k in data_keys],
