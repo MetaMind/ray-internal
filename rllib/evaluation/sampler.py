@@ -438,24 +438,22 @@ def _process_observations(base_env, policies, batch_builder_pool,
         # Treat the collated agents as a single agent!
         for agent_id, raw_obs in agent_obs.items():
             policy_id = episode.policy_for(agent_id)
-            if agent_id != '0':  # TODO: Fix the hard-code
-                if agent_id == 'a':  # TODO: Hard-coded
+            if agent_id != '0':  # TODO(sunil): Fix the hard-code
+                if agent_id == 'a':  # TODO(sunil): Hard-coded
                     # Get the total number of logical agents from one of the keys
                     for key in raw_obs:
                         num_agents = raw_obs[key].shape[-1]
                         break
                     # Pre-processing all the agents' observations at once!
-                    # TODO: Can the DictFlatteningPreprocessor be reused instead?
+                    # TODO(sunil): Can the DictFlatteningPreprocessor be reused instead?
                     raw_obs = OrderedDict(sorted(raw_obs.items()))
                     flattened_obs = np.array([]).reshape(0, num_agents)
                     for key in raw_obs.keys():
-                        if key != 'action_mask':
-                            flattened_obs = np.vstack((flattened_obs, raw_obs[key].reshape(-1, num_agents)))
-                    flattened_obs = np.transpose(flattened_obs).reshape(num_agents, -1)
-                    repeated_mask = raw_obs['action_mask'].reshape(num_agents, -1)
-        
-                    prep_obs = np.hstack((repeated_mask, flattened_obs))
-        
+                        flattened_obs = np.vstack((flattened_obs, raw_obs[key]
+                                                   .reshape(-1, num_agents)))
+                    prep_obs = np.transpose(flattened_obs) \
+                        .reshape(num_agents, -1)
+
                     # Setting the rnn states for the first iter
                     if rewards[env_id][agent_id] is None:
                         rewards[env_id][agent_id] = [0.0 for _ in range(num_agents)]
@@ -573,8 +571,8 @@ def _process_observations(base_env, policies, batch_builder_pool,
                 for agent_id, raw_obs in resetted_obs.items():
                     policy_id = episode.policy_for(agent_id)
                     policy = _get_or_raise(policies, policy_id)
-                    if agent_id != '0':  # TODO: Fix the hard-code
-                        if agent_id == 'a':  # TODO: Hard-coded
+                    if agent_id != '0':  # TODO(sunil): Fix the hard-code
+                        if agent_id == 'a':  # TODO(sunil): Hard-coded
             
                             # Get the total number of logical agents from one of the keys
                             for key in raw_obs:
@@ -582,20 +580,14 @@ def _process_observations(base_env, policies, batch_builder_pool,
                                 break
             
                             # Pre-processing all the agents' observations at once!
-                            # TODO: Can the DictFlatteningPreprocessor be reused instead?
+                            # TODO(sunil): Can the DictFlatteningPreprocessor be reused instead?
                             raw_obs = OrderedDict(sorted(raw_obs.items()))
                             flattened_obs = np.array([]).reshape(0, num_agents)
                             for key in raw_obs.keys():
-                                if key != 'action_mask':
-                                    flattened_obs = np.vstack((flattened_obs,
-                                                               raw_obs[key].reshape(-1,
-                                                                                    num_agents)))
-                            flattened_obs = np.transpose(flattened_obs).reshape(
-                                num_agents, -1)
-                            repeated_mask = raw_obs['action_mask'].reshape(num_agents,
-                                                                           -1)
-
-                            prep_obs = np.hstack((repeated_mask, flattened_obs))
+                                flattened_obs = np.vstack((flattened_obs, raw_obs[key]
+                                                           .reshape(-1, num_agents)))
+                            prep_obs = np.transpose(flattened_obs)\
+                                .reshape(num_agents, -1)
             
                             rnn_states = episode.rnn_state_for(agent_id)
                             if len(rnn_states) > 0:
@@ -675,7 +667,7 @@ def _do_policy_eval(tf_sess, to_eval, policies, active_episodes):
                 random_action = policy.action_space.sample()
                 if isinstance(random_action, int):
                     prev_action_batch = np.array(prev_action_batch).reshape(-1)
-                elif isinstance(random_action, list):
+                else:
                     action_dim = len(random_action)
                     prev_action_batch = np.array(prev_action_batch).reshape(-1, action_dim)
                 # Flatten prev_reward_batch to a list
@@ -756,7 +748,7 @@ def _process_policy_eval_results(to_eval, eval_results, active_episodes,
             random_action = policy.action_space.sample()
             if isinstance(random_action, int):
                 actions = actions.reshape(-1, num_agents)
-            elif isinstance(random_action, list):
+            else:
                 action_dim = len(random_action)
                 actions = actions.reshape(-1, num_agents, action_dim)
 

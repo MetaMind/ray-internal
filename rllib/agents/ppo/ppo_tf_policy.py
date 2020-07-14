@@ -4,7 +4,7 @@ import numpy as np ## SS**
 import ray
 from ray.rllib.agents.impala.vtrace_policy import BEHAVIOUR_LOGITS
 from ray.rllib.evaluation.postprocessing import compute_advantages, \
-    Postprocessing, compute_advantages_vectorized  # SS**
+    Postprocessing
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.policy import ACTION_LOGP
 from ray.rllib.policy.tf_policy import LearningRateSchedule, \
@@ -219,7 +219,7 @@ def postprocess_ppo_gae_vectorized(policy,
             random_action = policy.action_space.sample()
             if isinstance(random_action, int):
                 action_dim = 1
-            elif isinstance(random_action, list):
+            else:
                 action_dim = len(random_action)
             actions = np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(-1, action_dim)
             rewards = np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
@@ -230,7 +230,7 @@ def postprocess_ppo_gae_vectorized(policy,
             last_rs = last_rs[0:num_agents:]
             # print("LAST_RS_AGENT", last_rs_vector)
 
-        agent_batch = compute_advantages_vectorized(
+        agent_batch = compute_advantages(
             sample_batch,
             last_rs,
             policy.config["gamma"],
