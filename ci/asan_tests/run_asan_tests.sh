@@ -35,7 +35,7 @@ asan_run() {
     cd "${ROOT_DIR}"/../..
 
     # async plasma test
-    python -m pytest -v --durations=5 --timeout=300 python/ray/experimental/test/async_test.py
+    python -m pytest -v --durations=5 --timeout=300 python/ray/tests/test_async.py
 
     # Ray tests
     bazel test --test_tag_filters=-jenkins_only python/ray/serve/...
@@ -47,12 +47,12 @@ asan_run() {
 
 asan_recompile() {
   git fetch
-  git checkout "${git_sha}"
+  git checkout "$1"
   asan_install || true
 }
 
 if [ 0 -lt "$#" ]; then
-  asan_"$@"
+  "asan_$1" "${@:2}"
 else
   echo "Available commands: setup, run, recompile"
 fi
