@@ -211,7 +211,7 @@ def postprocess_ppo_gae_vectorized(policy,
             # Perform post processing
             next_state = []
             for i in range(policy.num_state_tensors()):
-                next_state.append([sample_batch["state_out_{}".format(i)][-1]])
+                next_state.append(sample_batch["state_out_{}".format(i)][-1])
 
             # Ensure all inputs are 2-D
             next_obs = sample_batch[SampleBatch.NEXT_OBS][-1]
@@ -221,14 +221,21 @@ def postprocess_ppo_gae_vectorized(policy,
                 action_dim = 1
             else:
                 action_dim = len(random_action)
-            actions = np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(-1, action_dim)
-            rewards = np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(-1, 1)
-            last_rs = policy._value(next_obs, actions, rewards, *next_state)
+            actions = sample_batch[SampleBatch.ACTIONS][-1].reshape(-1, action_dim)
+            rewards = sample_batch[SampleBatch.REWARDS][-1].reshape(-1, 1)
 
-            # TODO(sunil) - CHECK math!
-            num_agents = rewards.shape[0]
-            last_rs = last_rs[0:num_agents:]
-            # print("LAST_RS_AGENT", last_rs_vector)
+            # INCORRECT VERSION
+            # last_rs = policy._value(next_obs, actions, rewards, *next_state)
+            
+            # CORRECT VERSION
+            last_rs = np.zeros(num_agents)
+            # TODO: Parallelize this!!!!
+            for idx in range(num_agents):
+                last_rs[idx] = policy._value(next_obs[idx].reshape(1, -1),
+                                             actions[idx].reshape(1, -1),
+                                             rewards[idx].reshape(1, -1),
+                                             [n[idx].reshape(1, -1) for n in next_state])
+            # print("LAST_RS", last_rs)
 
         agent_batch = compute_advantages(
             sample_batch,

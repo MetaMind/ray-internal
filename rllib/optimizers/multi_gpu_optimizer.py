@@ -118,8 +118,8 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                                 policy._optimizer, self.devices,
                                 [v
                                  for _, v in policy._loss_inputs], rnn_inputs,
-                                # self.per_device_batch_size, policy.copy))
-                                self.per_device_batch_size*100, policy.copy))  # SS** TODO: VERIFY
+                                self.per_device_batch_size, policy.copy))
+                                # self.per_device_batch_size*100, policy.copy))  # SS** TODO: VERIFY
 
                 self.sess = self.workers.local_worker().tf_sess
                 self.sess.run(tf.global_variables_initializer())
@@ -230,7 +230,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
-                    num_batches = 1 ## SS**
+                    # num_batches = 1 ## SS**
                     permutation = np.random.permutation(num_batches)
                     for batch_index in range(num_batches):
                         batch_fetches = optimizer.optimize(
