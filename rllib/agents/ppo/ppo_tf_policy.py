@@ -185,7 +185,7 @@ def postprocess_ppo_gae(policy,
         last_r = policy._value(sample_batch[SampleBatch.NEXT_OBS][-1].reshape(1, -1),
                                np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(1, -1),
                                np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(1, -1),
-                               *next_state)
+                               np.array([1]), *next_state)
     # print("LAST_R_PLANNER", last_r)
     batch = compute_advantages(
         sample_batch,
@@ -224,19 +224,8 @@ def postprocess_ppo_gae_vectorized(policy,
             actions = sample_batch[SampleBatch.ACTIONS][-1].reshape(-1, action_dim)
             rewards = sample_batch[SampleBatch.REWARDS][-1].reshape(-1, 1)
 
-            # INCORRECT VERSION
-            # last_rs = policy._value(next_obs, actions, rewards, *next_state)
+            last_rs = policy._value(next_obs, actions, rewards, np.repeat([1], num_agents), *next_state)
             
-            # CORRECT VERSION
-            last_rs = np.zeros(num_agents)
-            # TODO: Parallelize this!!!!
-            for idx in range(num_agents):
-                last_rs[idx] = policy._value(next_obs[idx].reshape(1, -1),
-                                             actions[idx].reshape(1, -1),
-                                             rewards[idx].reshape(1, -1),
-                                             [n[idx].reshape(1, -1) for n in next_state])
-            # print("LAST_RS", last_rs)
-
         agent_batch = compute_advantages(
             sample_batch,
             last_rs,
@@ -293,7 +282,7 @@ class ValueNetworkMixin:
             # SS** Add dynamic_shape=True to add the number of agents' dimension
             # SS** removed the [0] from the output as the output will be a vector
             @make_tf_callable(self.get_session(), dynamic_shape=True)
-            def value(ob, prev_action, prev_reward, *state, seq_lens=[1]):
+            def value(ob, prev_action, prev_reward, seq_lens, *state):
                 model_out, _ = self.model({
                     SampleBatch.CUR_OBS: tf.convert_to_tensor(ob),
                     SampleBatch.PREV_ACTIONS: tf.convert_to_tensor(
