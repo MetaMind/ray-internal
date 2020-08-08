@@ -199,7 +199,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
 
                 for key in tuples:
                     # Blending the batch and n_agent axes
-                    if policy_id == 'a':
+                    if policy_id == 'a':  # TODO(sunil): hard-coded
                         if "observation" in key.name:
                             # Figure out number of agents
                             batch_size, n_agents, feature_size = tuples[key].shape
@@ -228,6 +228,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     1,
                     int(tuples_per_device) // int(self.per_device_batch_size))
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
+
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
                     # num_batches = 1 ## SS**
