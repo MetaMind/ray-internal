@@ -481,7 +481,7 @@ def _process_observations(base_env, policies, batch_builder_pool,
                 filtered_obs = _get_or_raise(obs_filters, policy_id)(prep_obs)
                 if log_once("filtered_obs"):
                     logger.info("Filtered obs: {}".format(summarize(filtered_obs)))
-    
+
                 agent_done = bool(all_done or dones[env_id].get(agent_id))
                 if not agent_done:
                     to_eval[policy_id].append(
@@ -623,7 +623,7 @@ def transform_states(rnn_in):
     rnn_in = np.array(rnn_in)
     if len(rnn_in.shape) == 4:
         batch_size, n_states, n_agents, len_states = rnn_in.shape
-        rnn_in = np.moveaxis(rnn_in, 2, 0).reshape(batch_size * n_agents, n_states, len_states)
+        rnn_in = np.swapaxes(rnn_in, 2, 1).reshape(batch_size * n_agents, n_states, len_states)
     return rnn_in
 
 
