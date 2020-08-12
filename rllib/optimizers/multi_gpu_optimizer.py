@@ -206,6 +206,10 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                         if "seq_lens" in key.name:
                             # TODO(sunil): Set this elsewhere?
                             tuples[key] = np.repeat(tuples[key], n_agents)
+                        elif "a/Placeholder" in key.name:
+                            prod = np.product(tuples[key].shape[:-1])
+                            tuples[key] = np.swapaxes(tuples[key], 0, 1)
+                            tuples[key] = tuples[key].reshape(prod, -1)
                         elif len(tuples[key].shape) == 2:
                             prod = np.product(tuples[key].shape[:2])
                             tuples[key] = tuples[key].reshape(prod,)
