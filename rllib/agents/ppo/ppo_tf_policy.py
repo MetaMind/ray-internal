@@ -186,7 +186,7 @@ def postprocess_ppo_gae(policy,
                                np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(1, -1),
                                np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(1, -1),
                                np.array([1]), *next_state)
-    # print("LAST_R_PLANNER", last_r)
+
     batch = compute_advantages(
         sample_batch,
         last_r,
@@ -225,7 +225,7 @@ def postprocess_ppo_gae_vectorized(policy,
             rewards = sample_batch[SampleBatch.REWARDS][-1].reshape(-1, 1)
 
             last_rs = policy._value(next_obs, actions, rewards, np.repeat([1], num_agents), *next_state)
-            
+
         agent_batch = compute_advantages(
             sample_batch,
             last_rs,

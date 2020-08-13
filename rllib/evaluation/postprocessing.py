@@ -83,12 +83,35 @@ def compute_advantages(rollout,
     traj[Postprocessing.ADVANTAGES] = traj[
         Postprocessing.ADVANTAGES].copy().astype(np.float32)
 
-    # print("TRAJ")
-    # for key, val in traj.items():
-    #     print(key, trajsize, val.shape)
-    # print("\n\n")
-    
     assert all(val.shape[0] == trajsize for val in traj.values()), \
         "Rollout stacked incorrectly!"
-    
-    return SampleBatch(traj)
+
+    # Organize traj into constituent agent trajectories
+    if len(traj[Postprocessing.ADVANTAGES].shape) == 1:
+        # single agent data
+        return SampleBatch(traj)
+    elif len(traj[Postprocessing.ADVANTAGES].shape) >= 2:
+        # collated agent data
+        num_agents = traj[Postprocessing.ADVANTAGES].shape[1]
+
+        agent_batch = {}
+        for agent_id in range(num_agents):
+            traj_agent = {}
+            for key, val in traj.items():
+                if len(val.shape) == 1:
+                    if key == 'agent_index':
+                        traj_agent[key] = agent_id * np.ones_like(val)
+                    else:
+                        traj_agent[key] = val
+                elif len(val.shape) == 2:
+                    assert val.shape[1] == num_agents
+                    traj_agent[key] = val[:, agent_id]
+                if len(val.shape) > 2:
+                    assert val.shape[1] == num_agents
+                    traj_agent[key] = val[:, agent_id, :]
+            agent_batch[str(agent_id)] = SampleBatch(traj_agent)
+
+        return agent_batch
+
+    else:
+        raise ValueError

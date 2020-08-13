@@ -132,20 +132,6 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 for e in self.workers.remote_workers():
                     e.set_weights.remote(weights)
 
-        # SS **
-        # import cProfile
-        # def local_run():
-        #     samples_local = []
-        #     while sum(s.count for s in samples_local) < self.train_batch_size:
-        #         samples_local.append(self.workers.local_worker().sample())
-        #
-        # cProfile.runctx("local_run()", locals(), globals(),
-        #                 "/Users/sunil.srinivasa/Desktop/profiles/"
-        #                 "sample_time_linear_model_all_agents_parallelized_local_iter_{}_10000trainingagents"
-        #                 .format(int(self.num_steps_sampled/10)))
-        # if self.num_steps_sampled == 30:
-        #     exit()
-
         with self.sample_timer:
             if self.workers.remote_workers():
                 samples = collect_samples(self.workers.remote_workers(),
@@ -196,29 +182,6 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     state_keys = policy._state_inputs + [policy._seq_lens]
                 else:
                     state_keys = []
-
-                for key in tuples:
-                    # Blending the batch and n_agent axes
-                    if policy_id == 'a':  # TODO(sunil): hard-coded
-                        if "observation" in key.name:
-                            # Figure out number of agents
-                            batch_size, n_agents, feature_size = tuples[key].shape
-                        if "seq_lens" in key.name:
-                            # TODO(sunil): Set this elsewhere?
-                            tuples[key] = np.repeat(tuples[key], n_agents)
-                        elif "a/Placeholder" in key.name:
-                            prod = np.product(tuples[key].shape[:-1])
-                            tuples[key] = np.swapaxes(tuples[key], 0, 1)
-                            tuples[key] = tuples[key].reshape(prod, -1)
-                        elif len(tuples[key].shape) == 2:
-                            prod = np.product(tuples[key].shape[:2])
-                            tuples[key] = tuples[key].reshape(prod,)
-                        elif len(tuples[key].shape) > 2:
-                            prod = np.product(tuples[key].shape[:-1])
-                            tuples[key] = tuples[key].reshape(prod, -1)
-                        else:
-                            tuples[key] = np.array(tuples[key])
-
                 num_loaded_tuples[policy_id] = (
                     self.optimizers[policy_id].load_data(
                         self.sess, [tuples[k] for k in data_keys],
@@ -232,7 +195,6 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     1,
                     int(tuples_per_device) // int(self.per_device_batch_size))
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
-
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
                     # num_batches = 1 ## SS**
@@ -243,17 +205,6 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                             self.per_device_batch_size)
                         for k, v in batch_fetches[LEARNER_STATS_KEY].items():
                             iter_extra_fetches[k].append(v)
-
-                    # def do_optimize(): ## SS** profiling optimizer
-                    #     for batch_index in range(num_batches):
-                    #         batch_fetches = optimizer.optimize(
-                    #             self.sess, permutation[batch_index] *
-                    #             self.per_device_batch_size)
-                    #         for k, v in batch_fetches[LEARNER_STATS_KEY].items():
-                    #             iter_extra_fetches[k].append(v)
-                    # import cProfile
-                    # cProfile.runctx("do_optimize()", locals(), globals(), "/users/sunil.srinivasa/Desktop/profiles/tmp")
-
                     logger.debug("{} {}".format(i,
                                                 averaged(iter_extra_fetches)))
                 fetches[policy_id] = averaged(iter_extra_fetches)
