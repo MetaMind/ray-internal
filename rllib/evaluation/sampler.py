@@ -538,13 +538,17 @@ def _process_observations(base_env, policies, batch_builder_pool,
                     filtered_obs = _get_or_raise(obs_filters,
                                                  policy_id)(prep_obs)
                     episode._set_last_observation(agent_id, filtered_obs)
+                    if agent_id == 'p':  # SS**
+                        random_action = policy.action_space.sample()
+                    else:
+                        random_action = 0  ## SS**
                     to_eval[policy_id].append(
                         PolicyEvalData(
                             env_id, agent_id, filtered_obs,
                             episode.last_info_for(agent_id) or {},
                             episode.rnn_state_for(agent_id),
                             np.zeros_like(
-                                _flatten_action(policy.action_space.sample())),
+                                _flatten_action(random_action)),
                             0.0))
 
     return active_envs, to_eval, outputs
