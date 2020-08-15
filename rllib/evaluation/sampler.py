@@ -603,13 +603,17 @@ def _process_observations(base_env, policies, batch_builder_pool,
         
                         filtered_obs = _get_or_raise(obs_filters, policy_id)(prep_obs)
                         episode._set_last_observation(agent_id, filtered_obs)
-                        
+                        if agent_id == 'p':
+                            random_action = policy.action_space.sample()
+                        else:
+                            random_action = 0  # SS**
+                            
                         to_eval[policy_id].append(
                             PolicyEvalData(env_id, agent_id, filtered_obs,
                                            episode.last_info_for(agent_id) or {},
                                            episode.rnn_state_for(agent_id),
                                            np.zeros_like(
-                                               _flatten_action(policy.action_space.sample())),
+                                               _flatten_action(random_action)),
                                            np.zeros_like(rewards[env_id][agent_id])))
 
     return active_envs, to_eval, outputs
@@ -664,7 +668,8 @@ def _do_policy_eval(tf_sess, to_eval, policies, active_episodes):
                 obs_len = eval_data[0].obs.shape[-1]
                 obs_batch = np.array(obs_batch).reshape(-1, obs_len)
                 # Handle Discrete and MultiDiscrete action space cases
-                random_action = policy.action_space.sample()
+                # random_action = policy.action_space.sample()
+                random_action = 0  # SS**
                 if isinstance(random_action, int):
                     prev_action_batch = np.array(prev_action_batch).reshape(-1)
                 else:
@@ -745,7 +750,8 @@ def _process_policy_eval_results(to_eval, eval_results, active_episodes,
         if policy_id == 'a':
             num_agents = eval_data[0].obs.shape[0]
             # Handle Discrete and MultiDiscrete action space cases
-            random_action = policy.action_space.sample()
+            # random_action = policy.action_space.sample()
+            random_action = 0  # SS**
             if isinstance(random_action, int):
                 actions = actions.reshape(-1, num_agents)
             else:

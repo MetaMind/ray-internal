@@ -216,16 +216,25 @@ def postprocess_ppo_gae_vectorized(policy,
             # Ensure all inputs are 2-D
             next_obs = sample_batch[SampleBatch.NEXT_OBS][-1]
             # Compute action dimension for Discrete and MultiDiscrete action spaces
-            random_action = policy.action_space.sample()
+            # random_action = policy.action_space.sample()
+            random_action = 0  # SS**
             if isinstance(random_action, int):
                 action_dim = 1
             else:
                 action_dim = len(random_action)
             actions = sample_batch[SampleBatch.ACTIONS][-1].reshape(-1, action_dim)
             rewards = sample_batch[SampleBatch.REWARDS][-1].reshape(-1, 1)
-
-            last_rs = policy._value(next_obs, actions, rewards, np.repeat([1], num_agents), *next_state)
-
+            # last_rs = policy._value(next_obs, actions, rewards, np.repeat([1], num_agents), *next_state)
+            # print("LAST_RS", last_rs, last_rs.dtype)
+            last_rs = np.zeros(num_agents, dtype=np.float32)
+            for idx in range(num_agents):
+                last_rs[idx] = policy._value(next_obs[idx].reshape(1, -1),
+                                                    actions[idx].reshape(1, -1),
+                                                    rewards[idx].reshape(1, -1),
+                                                    np.array([1]),
+                                                    [n[idx].reshape(1, -1) for n in next_state])
+            
+            
         agent_batch = compute_advantages(
             sample_batch,
             last_rs,

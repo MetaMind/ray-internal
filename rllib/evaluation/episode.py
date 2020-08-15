@@ -113,7 +113,12 @@ class MultiAgentEpisode:
             return _flatten_action(self._agent_to_last_action[agent_id])
         else:
             policy = self._policies[self.policy_for(agent_id)]
-            flat = _flatten_action(policy.action_space.sample())
+            # random_action = policy.action_space.sample()
+            if agent_id != 'p': ## SS**
+                random_action = 0
+            else:
+                random_action = policy.action_space.sample()
+            flat = _flatten_action(random_action)
             return np.zeros_like(flat)
 
     @DeveloperAPI
