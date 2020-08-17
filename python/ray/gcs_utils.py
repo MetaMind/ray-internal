@@ -3,6 +3,7 @@ from ray.core.generated.gcs_pb2 import (
     ActorTableData,
     GcsNodeInfo,
     JobTableData,
+    JobConfig,
     ErrorTableData,
     ErrorType,
     GcsEntry,
@@ -17,6 +18,7 @@ from ray.core.generated.gcs_pb2 import (
     ResourceTableData,
     ObjectLocationInfo,
     PubSubMessage,
+    WorkerTableData,
 )
 
 __all__ = [
@@ -24,6 +26,7 @@ __all__ = [
     "ActorTableData",
     "GcsNodeInfo",
     "JobTableData",
+    "JobConfig",
     "ErrorTableData",
     "ErrorType",
     "GcsEntry",
@@ -39,6 +42,7 @@ __all__ = [
     "construct_error_message",
     "ObjectLocationInfo",
     "PubSubMessage",
+    "WorkerTableData",
 ]
 
 FUNCTION_PREFIX = "RemoteFunction:"
@@ -58,16 +62,20 @@ RAY_ACTOR_PUBSUB_PATTERN = "ACTOR:*".encode("ascii")
 # Reporter pub/sub updates
 RAY_REPORTER_PUBSUB_PATTERN = "RAY_REPORTER.*".encode("ascii")
 
+RAY_ERROR_PUBSUB_PATTERN = "ERROR_INFO:*".encode("ascii")
+
 # These prefixes must be kept up-to-date with the TablePrefix enum in
 # gcs.proto.
 # TODO(rkn): We should use scoped enums, in which case we should be able to
 # just access the flatbuffer generated values.
 TablePrefix_RAYLET_TASK_string = "RAYLET_TASK"
 TablePrefix_OBJECT_string = "OBJECT"
-TablePrefix_ERROR_INFO_string = "ERROR_INFO"
 TablePrefix_PROFILE_string = "PROFILE"
 TablePrefix_JOB_string = "JOB"
 TablePrefix_ACTOR_string = "ACTOR"
+
+WORKER = 0
+DRIVER = 1
 
 
 def construct_error_message(job_id, error_type, message, timestamp):

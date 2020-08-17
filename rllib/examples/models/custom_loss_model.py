@@ -1,3 +1,5 @@
+import numpy as np
+
 from ray.rllib.models.model import Model, restore_original_dimensions
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.tf.tf_action_dist import Categorical
@@ -10,7 +12,7 @@ from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.offline import JsonReader
 
-tf = try_import_tf()
+tf1, tf, tfv = try_import_tf()
 torch, nn = try_import_torch()
 
 
@@ -73,7 +75,7 @@ class DeprecatedCustomLossModelV1(Model):
 
     def _build_layers_v2(self, input_dict, num_outputs, options):
         self.obs_in = input_dict["obs"]
-        with tf.variable_scope("shared", reuse=tf.AUTO_REUSE):
+        with tf1.variable_scope("shared", reuse=tf1.AUTO_REUSE):
             self.fcnet = FullyConnectedNetwork(input_dict, self.obs_space,
                                                self.action_space, num_outputs,
                                                options)
@@ -172,17 +174,18 @@ class TorchCustomLossModel(TorchModelV2, nn.Module):
 
         # Compute the IL loss.
         action_dist = TorchCategorical(logits, self.model_config)
-        self.policy_loss = policy_loss
-        self.imitation_loss = torch.mean(
+        imitation_loss = torch.mean(
             -action_dist.logp(torch.from_numpy(batch["actions"])))
+        self.imitation_loss_metric = imitation_loss.item()
+        self.policy_loss_metric = np.mean([l.item() for l in policy_loss])
 
         # Add the imitation loss to each already calculated policy loss term.
         # Alternatively (if custom loss has its own optimizer):
         # return policy_loss + [10 * self.imitation_loss]
-        return [l + 10 * self.imitation_loss for l in policy_loss]
+        return [loss_ + 10 * imitation_loss for loss_ in policy_loss]
 
-    def custom_stats(self):
+    def metrics(self):
         return {
-            "policy_loss": torch.mean(self.policy_loss),
-            "imitation_loss": self.imitation_loss,
+            "policy_loss": self.policy_loss_metric,
+            "imitation_loss": self.imitation_loss_metric,
         }

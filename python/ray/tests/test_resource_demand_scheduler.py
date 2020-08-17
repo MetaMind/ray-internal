@@ -146,11 +146,12 @@ def test_get_instances_respects_max_limit():
 class AutoscalingTest(unittest.TestCase):
     def setUp(self):
         NODE_PROVIDERS["mock"] = \
-            lambda: (None, self.create_provider)
+            lambda config: self.create_provider
         self.provider = None
         self.tmpdir = tempfile.mkdtemp()
 
     def tearDown(self):
+        self.provider = None
         del NODE_PROVIDERS["mock"]
         shutil.rmtree(self.tmpdir)
         ray.shutdown()
@@ -181,7 +182,7 @@ class AutoscalingTest(unittest.TestCase):
 
     def testScaleUpMinSanity(self):
         config_path = self.write_config(MULTI_WORKER_CLUSTER)
-        self.provider = MockProvider()
+        self.provider = MockProvider(default_instance_type="m4.large")
         runner = MockProcessRunner()
         autoscaler = StandardAutoscaler(
             config_path,
@@ -200,7 +201,7 @@ class AutoscalingTest(unittest.TestCase):
         config["min_workers"] = 0
         config["max_workers"] = 50
         config_path = self.write_config(config)
-        self.provider = MockProvider()
+        self.provider = MockProvider(default_instance_type="m4.large")
         runner = MockProcessRunner()
         autoscaler = StandardAutoscaler(
             config_path,

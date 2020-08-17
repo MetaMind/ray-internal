@@ -76,6 +76,18 @@ def test_no_route(serve_instance):
     assert result == 1
 
 
+def test_reject_duplicate_backend(serve_instance):
+    def f():
+        pass
+
+    def g():
+        pass
+
+    serve.create_backend("backend", f)
+    with pytest.raises(ValueError):
+        serve.create_backend("backend", g)
+
+
 def test_reject_duplicate_route(serve_instance):
     def f():
         pass
@@ -99,6 +111,22 @@ def test_reject_duplicate_endpoint(serve_instance):
     with pytest.raises(ValueError):
         serve.create_endpoint(
             endpoint_name, backend="backend", route="/different")
+
+
+def test_reject_duplicate_endpoint_and_route(serve_instance):
+    class SimpleBackend(object):
+        def __init__(self, message):
+            self.message = message
+
+        def __call__(self, *args, **kwargs):
+            return {"message": self.message}
+
+    serve.create_backend("backend1", SimpleBackend, "First")
+    serve.create_backend("backend2", SimpleBackend, "Second")
+
+    serve.create_endpoint("test", backend="backend1", route="/test")
+    with pytest.raises(ValueError):
+        serve.create_endpoint("test", backend="backend2", route="/test")
 
 
 def test_set_traffic_missing_data(serve_instance):
@@ -228,16 +256,16 @@ def test_updating_config(serve_instance):
         })
     serve.create_endpoint("bsimple", backend="bsimple:v1", route="/bsimple")
 
-    master_actor = serve.api._get_master_actor()
+    controller = serve.api._get_controller()
     old_replica_tag_list = ray.get(
-        master_actor._list_replicas.remote("bsimple:v1"))
+        controller._list_replicas.remote("bsimple:v1"))
 
     serve.update_backend_config("bsimple:v1", {"max_batch_size": 5})
     new_replica_tag_list = ray.get(
-        master_actor._list_replicas.remote("bsimple:v1"))
+        controller._list_replicas.remote("bsimple:v1"))
     new_all_tag_list = []
     for worker_dict in ray.get(
-            master_actor.get_all_worker_handles.remote()).values():
+            controller.get_all_worker_handles.remote()).values():
         new_all_tag_list.extend(list(worker_dict.keys()))
 
     # the old and new replica tag list should be identical
@@ -550,7 +578,7 @@ def test_create_infeasible_error(serve_instance):
             config={"num_replicas": current_cpus + 20})
 
     # No replica should be created!
-    replicas = ray.get(serve.api.master_actor._list_replicas.remote("f1"))
+    replicas = ray.get(serve.api.controller._list_replicas.remote("f1"))
     assert len(replicas) == 0
 
 
@@ -559,7 +587,7 @@ def test_shutdown(serve_instance):
         pass
 
     instance_name = "shutdown"
-    serve.init(name=instance_name, http_port=8002)
+    serve.init(name=instance_name, http_port=8003)
     serve.create_backend("backend", f)
     serve.create_endpoint("endpoint", backend="backend")
 
@@ -569,8 +597,8 @@ def test_shutdown(serve_instance):
 
     def check_dead():
         for actor_name in [
-                constants.SERVE_MASTER_NAME, constants.SERVE_PROXY_NAME,
-                constants.SERVE_ROUTER_NAME, constants.SERVE_METRIC_SINK_NAME
+                constants.SERVE_CONTROLLER_NAME, constants.SERVE_PROXY_NAME,
+                constants.SERVE_METRIC_SINK_NAME
         ]:
             try:
                 ray.get_actor(format_actor_name(actor_name, instance_name))
@@ -579,7 +607,7 @@ def test_shutdown(serve_instance):
                 pass
         return True
 
-    assert wait_for_condition(check_dead)
+    wait_for_condition(check_dead)
 
 
 def test_shadow_traffic(serve_instance):
@@ -622,7 +650,7 @@ def test_shadow_traffic(serve_instance):
             requests_to_backend("backend4") > 0,
         ])
 
-    assert wait_for_condition(check_requests)
+    wait_for_condition(check_requests)
 
 
 if __name__ == "__main__":

@@ -12,9 +12,9 @@ from ray.rllib.env.env_context import EnvContext
 from ray.rllib.policy import Policy
 from ray.rllib.utils import merge_dicts
 from ray.rllib.utils.framework import try_import_tf
-from ray.rllib.utils.types import PolicyID, TrainerConfigDict, EnvType
+from ray.rllib.utils.typing import PolicyID, TrainerConfigDict, EnvType
 
-tf = try_import_tf()
+tf1, tf, tfv = try_import_tf()
 
 logger = logging.getLogger(__name__)
 
@@ -202,8 +202,8 @@ class WorkerSet:
         def session_creator():
             logger.debug("Creating TF session {}".format(
                 config["tf_session_args"]))
-            return tf.Session(
-                config=tf.ConfigProto(**config["tf_session_args"]))
+            return tf1.Session(
+                config=tf1.ConfigProto(**config["tf_session_args"]))
 
         if isinstance(config["input"], FunctionType):
             input_creator = config["input"]

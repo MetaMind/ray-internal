@@ -1,6 +1,7 @@
 import os
 import logging
 from os.path import dirname
+import platform
 import sys
 
 logger = logging.getLogger(__name__)
@@ -36,8 +37,12 @@ sys.path.insert(0, thirdparty_files)
 
 if sys.platform == "win32":
     import ray.compat  # noqa: E402
-    ray.compat.patch_psutil()
     ray.compat.patch_redis_empty_recv()
+
+if (platform.system() == "Linux"
+        and "Microsoft".lower() in platform.release().lower()):
+    import ray.compat  # noqa: E402
+    ray.compat.patch_psutil()
 
 # Expose ray ABI symbols which may be dependent by other shared
 # libraries such as _streaming.so. See BUILD.bazel:_raylet
@@ -60,9 +65,11 @@ from ray._raylet import (
     WorkerID,
     FunctionID,
     ObjectID,
+    ObjectRef,
     TaskID,
     UniqueID,
     Language,
+    PlacementGroupID,
 )  # noqa: E402
 
 _config = _Config()
@@ -70,28 +77,12 @@ _config = _Config()
 from ray.profiling import profile  # noqa: E402
 from ray.state import (jobs, nodes, actors, objects, timeline,
                        object_transfer_timeline, cluster_resources,
-                       available_resources, errors)  # noqa: E402
-from ray.worker import (
-    LOCAL_MODE,
-    SCRIPT_MODE,
-    WORKER_MODE,
-    cancel,
-    connect,
-    disconnect,
-    get,
-    get_actor,
-    get_gpu_ids,
-    get_resource_ids,
-    get_webui_url,
-    init,
-    is_initialized,
-    put,
-    kill,
-    register_custom_serializer,
-    remote,
-    shutdown,
-    show_in_webui,
-    wait,
+                       available_resources)  # noqa: E402
+from ray.worker import (  # noqa: F401
+    LOCAL_MODE, SCRIPT_MODE, WORKER_MODE, IO_WORKER_MODE, cancel, connect,
+    disconnect, get, get_actor, get_gpu_ids, get_resource_ids, get_webui_url,
+    init, is_initialized, put, kill, register_custom_serializer, remote,
+    shutdown, show_in_webui, wait,
 )  # noqa: E402
 import ray.internal  # noqa: E402
 import ray.projects  # noqa: E402
@@ -115,7 +106,6 @@ __all__ = [
     "object_transfer_timeline",
     "cluster_resources",
     "available_resources",
-    "errors",
     "LOCAL_MODE",
     "PYTHON_MODE",
     "SCRIPT_MODE",
@@ -161,6 +151,8 @@ __all__ += [
     "WorkerID",
     "FunctionID",
     "ObjectID",
+    "ObjectRef",
     "TaskID",
     "UniqueID",
+    "PlacementGroupID",
 ]

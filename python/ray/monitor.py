@@ -97,15 +97,9 @@ class Monitor:
         message = ray.gcs_utils.HeartbeatBatchTableData.FromString(
             heartbeat_data)
         for heartbeat_message in message.batch:
-            resource_load = dict(
-                zip(heartbeat_message.resource_load_label,
-                    heartbeat_message.resource_load_capacity))
-            total_resources = dict(
-                zip(heartbeat_message.resources_total_label,
-                    heartbeat_message.resources_total_capacity))
-            available_resources = dict(
-                zip(heartbeat_message.resources_available_label,
-                    heartbeat_message.resources_available_capacity))
+            resource_load = dict(heartbeat_message.resource_load)
+            total_resources = dict(heartbeat_message.resources_total)
+            available_resources = dict(heartbeat_message.resources_available)
             for resource in total_resources:
                 available_resources.setdefault(resource, 0.0)
 
@@ -220,6 +214,9 @@ class Monitor:
         This function loops forever, checking for messages about dead database
         clients and cleaning up state accordingly.
         """
+        # Initialize the mapping from raylet client ID to IP address.
+        self.update_raylet_map()
+
         # Initialize the subscription channel.
         self.psubscribe(ray.gcs_utils.XRAY_HEARTBEAT_BATCH_PATTERN)
         self.psubscribe(ray.gcs_utils.XRAY_JOB_PATTERN)
@@ -233,12 +230,10 @@ class Monitor:
 
         # Handle messages from the subscription channels.
         while True:
-            # Update the mapping from raylet client ID to IP address.
-            # This is only used to update the load metrics for the autoscaler.
-            self.update_raylet_map()
-
             # Process autoscaling actions
             if self.autoscaler:
+                # Only used to update the load metrics for the autoscaler.
+                self.update_raylet_map()
                 self.autoscaler.update()
 
             # Process a round of messages.
