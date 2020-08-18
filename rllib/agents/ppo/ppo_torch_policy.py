@@ -185,20 +185,20 @@ class ValueNetworkMixin:
     def __init__(self, obs_space, action_space, config):
         if config["use_gae"]:
 
-            def value(ob, prev_action, prev_reward, *state):
+            def value(ob, prev_action, prev_reward, seq_lens, *state):
                 model_out, _ = self.model({
                     SampleBatch.CUR_OBS: convert_to_torch_tensor(
-                        np.asarray([ob]), self.device),
+                        np.asarray(ob), self.device),
                     SampleBatch.PREV_ACTIONS: convert_to_torch_tensor(
-                        np.asarray([prev_action]), self.device),
+                        np.asarray(prev_action), self.device),
                     SampleBatch.PREV_REWARDS: convert_to_torch_tensor(
-                        np.asarray([prev_reward]), self.device),
+                        np.asarray(prev_reward), self.device),
                     "is_training": False,
                 }, [
-                    convert_to_torch_tensor(np.asarray([s]), self.device)
+                    convert_to_torch_tensor(np.asarray(s), self.device)
                     for s in state
-                ], convert_to_torch_tensor(np.asarray([1]), self.device))
-                return self.model.value_function()[0]
+                ], convert_to_torch_tensor(np.asarray(seq_lens), self.device))
+                return self.model.value_function()
 
         else:
 
@@ -222,7 +222,7 @@ PPOTorchPolicy = build_torch_policy(
     loss_fn=ppo_surrogate_loss,
     stats_fn=kl_and_loss_stats,
     extra_action_out_fn=vf_preds_fetches,
-    postprocess_fn=postprocess_ppo_gae,
+    postprocess_fn=postprocess_ppo_gae_vectorized,
     extra_grad_process_fn=apply_grad_clipping,
     before_init=setup_config,
     after_init=setup_mixins,
