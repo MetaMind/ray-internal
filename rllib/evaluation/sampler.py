@@ -1101,6 +1101,7 @@ def _process_policy_eval_results(
         # Set the number of logical actions for each policy id
         if policy_id == 'a':
             num_agents = eval_data[0].obs.shape[0]
+            actions = np.array(actions)
             # Handle Discrete and MultiDiscrete action space cases
             random_action = policy.action_space.sample()
             if isinstance(random_action, int):
