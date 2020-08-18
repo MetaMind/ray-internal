@@ -82,7 +82,9 @@ class MultiAgentEpisode:
     def soft_reset(self) -> None:
         """Clears rewards and metrics, but retains RNN and other state.
 
-        This is used to carry state across multiple logical episodes in the
+        This is used to carry state across
+         
+         multiple logical episodes in the
         same env (i.e., if `soft_horizon` is set).
         """
         self.length = 0
@@ -179,10 +181,12 @@ class MultiAgentEpisode:
 
     def _add_agent_rewards(self, reward_dict: Dict[AgentID, float]) -> None:
         for agent_id, reward in reward_dict.items():
+            # Changed 'reward' to 'np.mean(reward)' for parallel processing of agents.
+            # Note: The reward history still contains all the individual agents' rewards.
             if reward is not None:
                 self.agent_rewards[agent_id,
-                                   self.policy_for(agent_id)] += reward
-                self.total_reward += reward
+                                   self.policy_for(agent_id)] += np.mean(reward)
+                self.total_reward += np.mean(reward)
                 self._agent_reward_history[agent_id].append(reward)
 
     def _set_rnn_state(self, agent_id, rnn_state):

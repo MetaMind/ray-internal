@@ -1,4 +1,5 @@
 import logging
+import numpy as np ## SS**
 
 import ray
 from ray.rllib.evaluation.postprocessing import compute_advantages, \
@@ -173,12 +174,14 @@ def postprocess_ppo_gae(policy,
         last_r = 0.0
     else:
         next_state = []
+        # SS** Add dummy dimension 0 to make work with the value function call
+        # TODO(sunil): Are the reshapes necessary?
         for i in range(policy.num_state_tensors()):
-            next_state.append(sample_batch["state_out_{}".format(i)][-1])
-        last_r = policy._value(sample_batch[SampleBatch.NEXT_OBS][-1],
-                               sample_batch[SampleBatch.ACTIONS][-1],
-                               sample_batch[SampleBatch.REWARDS][-1],
-                               *next_state)
+            next_state.append([sample_batch["state_out_{}".format(i)][-1].reshape(1, -1)])
+        last_r = policy._value(sample_batch[SampleBatch.NEXT_OBS][-1].reshape(1, -1),
+                               np.array(sample_batch[SampleBatch.ACTIONS][-1]).reshape(1, -1),
+                               np.array(sample_batch[SampleBatch.REWARDS][-1]).reshape(1, -1),
+                               np.array([1]), *next_state)
     batch = compute_advantages(
         sample_batch,
         last_r,
@@ -186,6 +189,52 @@ def postprocess_ppo_gae(policy,
         policy.config["lambda"],
         use_gae=policy.config["use_gae"])
     return batch
+
+
+# SS** parallelized version of postprocess_ppo_gae()
+def postprocess_ppo_gae_vectorized(policy,
+                                   sample_batch,
+                                   other_agent_batches=None,
+                                   episode=None):
+
+    if other_agent_batches is not None and 'p' in other_agent_batches: # TODO(sunil): 'p' is hard-coded!
+        num_agents = len(sample_batch[SampleBatch.REWARDS][-1])
+        completed = sample_batch["dones"][-1]
+        if completed:
+            last_rs = [0.0 for _ in range(num_agents)]
+        else:
+            # Perform post processing
+            next_state = []
+            for i in range(policy.num_state_tensors()):
+                next_state.append(sample_batch["state_out_{}".format(i)][-1])
+
+            # Ensure all inputs are 2-D
+            next_obs = sample_batch[SampleBatch.NEXT_OBS][-1]
+            # Compute action dimension for Discrete and MultiDiscrete action spaces
+            random_action = policy.action_space.sample()
+            if isinstance(random_action, int):
+                action_dim = 1
+            else:
+                action_dim = len(random_action)
+            actions = sample_batch[SampleBatch.ACTIONS][-1].reshape(-1, action_dim)
+            rewards = sample_batch[SampleBatch.REWARDS][-1].reshape(-1, 1)
+
+            last_rs = policy._value(next_obs, actions, rewards, np.repeat([1], num_agents), *next_state)
+
+        agent_batch = compute_advantages(
+            sample_batch,
+            last_rs,
+            policy.config["gamma"],
+            policy.config["lambda"],
+            use_gae=policy.config["use_gae"])
+
+        return agent_batch
+
+    else:
+        return postprocess_ppo_gae(policy,
+                                   sample_batch,
+                                   other_agent_batches,
+                                   episode)
 
 
 def clip_gradients(policy, optimizer, loss):
@@ -221,19 +270,20 @@ class KLCoeffMixin:
 class ValueNetworkMixin:
     def __init__(self, obs_space, action_space, config):
         if config["use_gae"]:
-
-            @make_tf_callable(self.get_session())
-            def value(ob, prev_action, prev_reward, *state):
+            # SS** Add dynamic_shape=True to add the number of agents' dimension
+            # SS** removed the [0] from the output as the output will be a vector
+            @make_tf_callable(self.get_session(), dynamic_shape=True)
+            def value(ob, prev_action, prev_reward, seq_lens, *state):
                 model_out, _ = self.model({
-                    SampleBatch.CUR_OBS: tf.convert_to_tensor([ob]),
+                    SampleBatch.CUR_OBS: tf.convert_to_tensor(ob),
                     SampleBatch.PREV_ACTIONS: tf.convert_to_tensor(
-                        [prev_action]),
+                        prev_action),
                     SampleBatch.PREV_REWARDS: tf.convert_to_tensor(
-                        [prev_reward]),
-                    "is_training": tf.convert_to_tensor([False]),
-                }, [tf.convert_to_tensor([s]) for s in state],
-                                          tf.convert_to_tensor([1]))
-                return self.model.value_function()[0]
+                        prev_reward),
+                    "is_training": tf.convert_to_tensor(False),
+                }, [tf.convert_to_tensor(s) for s in state],
+                                          tf.convert_to_tensor(seq_lens))
+                return self.model.value_function()
 
         else:
 
@@ -263,7 +313,7 @@ PPOTFPolicy = build_tf_policy(
     loss_fn=ppo_surrogate_loss,
     stats_fn=kl_and_loss_stats,
     extra_action_fetches_fn=vf_preds_fetches,
-    postprocess_fn=postprocess_ppo_gae,
+    postprocess_fn=postprocess_ppo_gae_vectorized,  # SS**
     gradients_fn=clip_gradients,
     before_init=setup_config,
     before_loss_init=setup_mixins,

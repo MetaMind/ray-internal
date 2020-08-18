@@ -47,9 +47,11 @@ def compute_advantages(rollout: SampleBatch,
         "Can't use gae without using a value function"
 
     if use_gae:
+        if len(rollout[SampleBatch.VF_PREDS].shape) == len(np.array(last_r).shape)+1:
+            last_r = [last_r]
         vpred_t = np.concatenate(
             [rollout[SampleBatch.VF_PREDS],
-             np.array([last_r])])
+             np.array(last_r)])  # SS** -> changed [last_r] to last_r
         delta_t = (
             rollout[SampleBatch.REWARDS] + gamma * vpred_t[1:] - vpred_t[:-1])
         # This formula for the advantage comes from:
@@ -61,7 +63,7 @@ def compute_advantages(rollout: SampleBatch,
     else:
         rewards_plus_v = np.concatenate(
             [rollout[SampleBatch.REWARDS],
-             np.array([last_r])])
+             np.array(last_r)])  # SS** -> changed [last_r] to last_r
         discounted_returns = discount(rewards_plus_v,
                                       gamma)[:-1].copy().astype(np.float32)
 
@@ -80,4 +82,34 @@ def compute_advantages(rollout: SampleBatch,
 
     assert all(val.shape[0] == rollout_size for key, val in rollout.items()), \
         "Rollout stacked incorrectly!"
-    return rollout
+
+    # Organize traj into constituent agent trajectories
+    if len(rollout[Postprocessing.ADVANTAGES].shape) == 1:
+        # single agent data
+        return rollout
+    elif len(rollout[Postprocessing.ADVANTAGES].shape) >= 2:
+        # collated agent data
+        num_agents = rollout[Postprocessing.ADVANTAGES].shape[1]
+
+        agent_batch = {}
+        for agent_id in range(num_agents):
+            traj_agent = {}
+            for key, val in rollout.items():
+                if len(val.shape) == 1:
+                    if key == 'agent_index':
+                        traj_agent[key] = agent_id * np.ones_like(val)
+                    else:
+                        traj_agent[key] = val
+                elif len(val.shape) == 2:
+                    assert val.shape[1] == num_agents
+                    traj_agent[key] = val[:, agent_id]
+                if len(val.shape) > 2:
+                    assert val.shape[1] == num_agents
+                    traj_agent[key] = val[:, agent_id, :]
+            agent_batch[str(agent_id)] = SampleBatch(traj_agent)
+
+        return agent_batch
+
+    else:
+        raise ValueError
+

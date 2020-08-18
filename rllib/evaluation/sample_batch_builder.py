@@ -190,13 +190,21 @@ class MultiAgentSampleBatchBuilder:
                 raise ValueError(
                     "Batches sent to postprocessing must only contain steps "
                     "from a single trajectory.", pre_batch)
-            post_batches[agent_id] = policy.postprocess_trajectory(
-                pre_batch, other_batches, episode)
-            # Call the Policy's Exploration's postprocess method.
-            if getattr(policy, "exploration", None) is not None:
-                policy.exploration.postprocess_trajectory(
-                    policy, post_batches[agent_id],
-                    getattr(policy, "_sess", None))
+            if agent_id == 'a':  # TODO(sunil) 'a' is hard-coded
+                collated_post_batches = policy.postprocess_trajectory(
+                    pre_batch, other_batches, episode)
+
+                num_agents = len(collated_post_batches.keys())
+                for agent_id in range(num_agents):
+                    post_batches[str(agent_id)] = collated_post_batches[str(agent_id)]
+            else:
+                post_batches[agent_id] = policy.postprocess_trajectory(
+                    pre_batch, other_batches, episode)
+                # Call the Policy's Exploration's postprocess method.
+                if getattr(policy, "exploration", None) is not None:
+                    policy.exploration.postprocess_trajectory(
+                        policy, post_batches[agent_id],
+                        getattr(policy, "_sess", None))
 
         if log_once("after_post"):
             logger.info(
@@ -206,6 +214,9 @@ class MultiAgentSampleBatchBuilder:
         # Append into policy batches and reset
         from ray.rllib.evaluation.rollout_worker import get_global_worker
         for agent_id, post_batch in sorted(post_batches.items()):
+            # Map the individual agents to the collated agent policy
+            if agent_id != 'p': ## SS**
+                self.agent_to_policy[agent_id] = self.agent_to_policy['a']
             self.callbacks.on_postprocess_trajectory(
                 worker=get_global_worker(),
                 episode=episode,

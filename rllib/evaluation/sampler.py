@@ -1,5 +1,5 @@
 from abc import abstractmethod, ABCMeta
-from collections import defaultdict, namedtuple
+from collections import defaultdict, namedtuple, OrderedDict
 import logging
 import numpy as np
 import queue
@@ -703,56 +703,93 @@ def _process_observations(
                 raise ValueError(
                     "observe() must return a dict of agent observations")
 
-        # For each agent in the environment.
+        # For each agent in the environment, except the dummy agent '0'.
+        # Treat the collated agents as a single agent!
         # type: AgentID, EnvObsType
         for agent_id, raw_obs in agent_obs.items():
             assert agent_id != "__all__"
             policy_id: PolicyID = episode.policy_for(agent_id)
-            prep_obs: EnvObsType = _get_or_raise(preprocessors,
-                                                 policy_id).transform(raw_obs)
-            if log_once("prep_obs"):
-                logger.info("Preprocessed obs: {}".format(summarize(prep_obs)))
+            if agent_id != '0':  # TODO(sunil): Fix the hard-code
+                if agent_id == 'a':  # TODO(sunil): Hard-coded
+                    # Get the total number of logical agents from one of the keys
+                    for key in raw_obs:
+                        num_agents = raw_obs[key].shape[-1]
+                        break
+                    # Pre-processing all the agents' observations at once!
+                    # TODO(sunil): Can the DictFlatteningPreprocessor be reused instead?
+                    raw_obs = OrderedDict(sorted(raw_obs.items()))
+                    flattened_obs = np.array([]).reshape(0, num_agents)
+                    for key in raw_obs.keys():
+                        flattened_obs = np.vstack((flattened_obs, raw_obs[key]
+                                                   .reshape(-1, num_agents)))
+                    prep_obs: EnvObsType = np.transpose(flattened_obs) \
+                        .reshape(num_agents, -1)
+        
+                    # Setting the rnn states for the first iter
+                    if rewards[env_id][agent_id] is None:
+                        rewards[env_id][agent_id] = [0.0 for _ in range(num_agents)]
+                        # For non-empty rnn states
+                        rnn_states = episode.rnn_state_for(agent_id)
+                        if len(rnn_states) > 0:
+                            rnn_states = np.repeat(
+                                np.array(rnn_states)[:, np.newaxis, :],
+                                num_agents, axis=1)
+                            episode._set_rnn_state(agent_id, rnn_states)
+        
+                    # Setting the prev rewards
+                    prev_rewards = episode.prev_reward_for(agent_id)
+                    if isinstance(prev_rewards, float) or len(
+                        prev_rewards) != num_agents:
+                        prev_rewards = [0.0 for _ in range(num_agents)]
+                else:
+                    prep_obs: EnvObsType = _get_or_raise(preprocessors,
+                                             policy_id).transform(raw_obs)
+                    if rewards[env_id][agent_id] is None:
+                        rewards[env_id][agent_id] = 0.0
+                    prev_rewards = episode.prev_reward_for(agent_id)
+    
+                if log_once("prep_obs"):
+                    logger.info("Preprocessed obs: {}".format(summarize(prep_obs)))
+    
+                filtered_obs: EnvObsType = _get_or_raise(obs_filters,
+                                                         policy_id)(prep_obs)
+                if log_once("filtered_obs"):
+                    logger.info("Filtered obs: {}".format(summarize(filtered_obs)))
 
-            filtered_obs: EnvObsType = _get_or_raise(obs_filters,
-                                                     policy_id)(prep_obs)
-            if log_once("filtered_obs"):
-                logger.info("Filtered obs: {}".format(summarize(filtered_obs)))
+                agent_done = bool(all_agents_done or dones[env_id].get(agent_id))
+                if not agent_done:
+                    to_eval[policy_id].append(
+                        PolicyEvalData(env_id, agent_id, filtered_obs,
+                                       infos[env_id].get(agent_id, {}),
+                                       episode.rnn_state_for(agent_id),
+                                       episode.last_action_for(agent_id),
+                                       rewards[env_id][agent_id]))
+    
+                last_observation: EnvObsType = episode.last_observation_for(agent_id)
+                episode._set_last_observation(agent_id, filtered_obs)
+                episode._set_last_raw_obs(agent_id, raw_obs)
+                episode._set_last_info(agent_id, infos[env_id].get(agent_id, {}))
 
-            agent_done = bool(all_agents_done or dones[env_id].get(agent_id))
-            if not agent_done:
-                to_eval[policy_id].append(
-                    PolicyEvalData(env_id, agent_id, filtered_obs,
-                                   infos[env_id].get(agent_id, {}),
-                                   episode.rnn_state_for(agent_id),
-                                   episode.last_action_for(agent_id),
-                                   rewards[env_id][agent_id] or 0.0))
-
-            last_observation: EnvObsType = episode.last_observation_for(
-                agent_id)
-            episode._set_last_observation(agent_id, filtered_obs)
-            episode._set_last_raw_obs(agent_id, raw_obs)
-            episode._set_last_info(agent_id, infos[env_id].get(agent_id, {}))
-
-            # Record transition info if applicable.
-            if (last_observation is not None and infos[env_id].get(
+                # Record transition info if applicable
+                if (last_observation is not None and infos[env_id].get(
                     agent_id, {}).get("training_enabled", True)):
-                episode.batch_builder.add_values(
-                    agent_id,
-                    policy_id,
-                    t=episode.length - 1,
-                    eps_id=episode.episode_id,
-                    agent_index=episode._agent_index(agent_id),
-                    obs=last_observation,
-                    actions=episode.last_action_for(agent_id),
-                    rewards=rewards[env_id][agent_id],
-                    prev_actions=episode.prev_action_for(agent_id),
-                    prev_rewards=episode.prev_reward_for(agent_id),
-                    dones=(False if (no_done_at_end
-                                     or (hit_horizon and soft_horizon)) else
-                           agent_done),
-                    infos=infos[env_id].get(agent_id, {}),
-                    new_obs=filtered_obs,
-                    **episode.last_pi_info_for(agent_id))
+                    episode.batch_builder.add_values(
+                        agent_id,
+                        policy_id,
+                        t=episode.length - 1,
+                        eps_id=episode.episode_id,
+                        agent_index=episode._agent_index(agent_id),
+                        obs=last_observation,
+                        actions=episode.last_action_for(agent_id),
+                        rewards=rewards[env_id][agent_id],
+                        prev_actions=episode.prev_action_for(agent_id),
+                        prev_rewards=prev_rewards,
+                        dones=(False if (no_done_at_end
+                                         or (hit_horizon and soft_horizon)) else
+                               agent_done),
+                        infos=infos[env_id].get(agent_id, {}),
+                        new_obs=filtered_obs,
+                        **episode.last_pi_info_for(agent_id))
 
         # Invoke the step callback after the step is logged to the episode
         callbacks.on_episode_step(
@@ -824,21 +861,61 @@ def _process_observations(
                 for agent_id, raw_obs in resetted_obs.items():
                     policy_id: PolicyID = episode.policy_for(agent_id)
                     policy: Policy = _get_or_raise(policies, policy_id)
-                    prep_obs: EnvObsType = _get_or_raise(
-                        preprocessors, policy_id).transform(raw_obs)
-                    filtered_obs: EnvObsType = _get_or_raise(
-                        obs_filters, policy_id)(prep_obs)
-                    episode._set_last_observation(agent_id, filtered_obs)
-                    to_eval[policy_id].append(
-                        PolicyEvalData(
-                            env_id, agent_id, filtered_obs,
-                            episode.last_info_for(agent_id) or {},
-                            episode.rnn_state_for(agent_id),
-                            np.zeros_like(
-                                flatten_to_single_ndarray(
-                                    policy.action_space.sample())), 0.0))
+                    if agent_id != '0':  # TODO(sunil): Fix the hard-code
+                        if agent_id == 'a':  # TODO(sunil): Hard-coded
+        
+                            # Get the total number of logical agents from one of the keys
+                            for key in raw_obs:
+                                num_agents = raw_obs[key].shape[-1]
+                                break
+        
+                            # Pre-processing all the agents' observations at once!
+                            # TODO(sunil): Can the DictFlatteningPreprocessor be reused instead?
+                            raw_obs = OrderedDict(sorted(raw_obs.items()))
+                            flattened_obs = np.array([]).reshape(0, num_agents)
+                            for key in raw_obs.keys():
+                                flattened_obs = np.vstack((flattened_obs, raw_obs[key]
+                                                           .reshape(-1, num_agents)))
+                            prep_obs: EnvObsType = np.transpose(flattened_obs) \
+                                .reshape(num_agents, -1)
+        
+                            rnn_states = episode.rnn_state_for(agent_id)
+                            if len(rnn_states) > 0:
+                                rnn_states = np.repeat(
+                                    np.array(rnn_states)[:, np.newaxis, :],
+                                    num_agents, axis=1)
+                                episode._set_rnn_state(agent_id, rnn_states)
+                        else:
+                            prep_obs = _get_or_raise(preprocessors,
+                                                     policy_id).transform(raw_obs)
+                            if rewards[env_id][agent_id] is None:
+                                rewards[env_id][agent_id] = 0.0
+    
+                        filtered_obs: EnvObsType = _get_or_raise(obs_filters, policy_id)(prep_obs)
+                        episode._set_last_observation(agent_id, filtered_obs)
+    
+                        to_eval[policy_id].append(
+                            PolicyEvalData(env_id, agent_id, filtered_obs,
+                                           episode.last_info_for(agent_id) or {},
+                                           episode.rnn_state_for(agent_id),
+                                           np.zeros_like(
+                                               flatten_to_single_ndarray(
+                                                   policy.action_space.sample())),
+                                           np.zeros_like(rewards[env_id][agent_id])))
 
     return active_envs, to_eval, outputs
+
+
+def transform_states(rnn_in):
+    """
+    Combine the batch-size and number of agents dimensions for the rnn state of the
+    collated agent.
+    """
+    rnn_in = np.array(rnn_in)
+    if len(rnn_in.shape) == 4:
+        batch_size, n_states, n_agents, len_states = rnn_in.shape
+        rnn_in = np.swapaxes(rnn_in, 2, 1).reshape(batch_size * n_agents, n_states, len_states)
+    return rnn_in
 
 
 def _do_policy_eval(
@@ -891,10 +968,28 @@ def _do_policy_eval(
                         TFPolicy.compute_actions.__code__):
 
             obs_batch: List[EnvObsType] = [t.obs for t in eval_data]
-            state_batches: StateBatch = _to_column_format(rnn_in)
             # TODO(ekl): how can we make info batch available to TF code?
             prev_action_batch = [t.prev_action for t in eval_data]
             prev_reward_batch = [t.prev_reward for t in eval_data]
+            
+            ## SS **
+            # Make the state 3-D
+            if policy_id == 'a':
+                rnn_in = transform_states(rnn_in)
+
+                obs_len = eval_data[0].obs.shape[-1]
+                obs_batch = np.array(obs_batch).reshape(-1, obs_len)
+                # Handle Discrete and MultiDiscrete action space cases
+                random_action = policy.action_space.sample()
+                if isinstance(random_action, int):
+                    prev_action_batch = np.array(prev_action_batch).reshape(-1)
+                else:
+                    action_dim = len(random_action)
+                    prev_action_batch = np.array(prev_action_batch).reshape(-1, action_dim)
+                # Flatten prev_reward_batch to a list
+                prev_reward_batch = [val for sublist in prev_reward_batch for val in sublist]
+
+            state_batches: StateBatch = _to_column_format(rnn_in)
 
             pending_fetches[policy_id] = policy._build_compute_actions(
                 builder,
@@ -976,9 +1071,11 @@ def _process_policy_eval_results(
 
     # type: PolicyID, List[PolicyEvalData]
     for policy_id, eval_data in to_eval.items():
-        rnn_in_cols: StateBatch = _to_column_format(
-            [t.rnn_state for t in eval_data])
-
+        rnn_in: StateBatch = [t.rnn_state for t in eval_data]
+        if policy_id == 'a':
+            rnn_in = transform_states(rnn_in)
+        rnn_in_cols = _to_column_format(rnn_in)
+        
         actions: TensorStructType = eval_results[policy_id][0]
         rnn_out_cols: StateBatch = eval_results[policy_id][1]
         pi_info_cols: dict = eval_results[policy_id][2]
@@ -1001,21 +1098,43 @@ def _process_policy_eval_results(
         # Split action-component batches into single action rows.
         actions: List[EnvActionType] = unbatch(actions)
         # type: int, EnvActionType
+        # Set the number of logical actions for each policy id
+        if policy_id == 'a':
+            num_agents = eval_data[0].obs.shape[0]
+            # Handle Discrete and MultiDiscrete action space cases
+            random_action = policy.action_space.sample()
+            if isinstance(random_action, int):
+                actions = actions.reshape(-1, num_agents)
+            else:
+                action_dim = len(random_action)
+                actions = actions.reshape(-1, num_agents, action_dim)
+        
         for i, action in enumerate(actions):
             env_id: int = eval_data[i].env_id
             agent_id: AgentID = eval_data[i].agent_id
-            # Clip if necessary.
-            if clip_actions:
-                clipped_action = clip_action(action,
-                                             policy.action_space_struct)
-            else:
-                clipped_action = action
-            actions_to_send[env_id][agent_id] = clipped_action
             episode: MultiAgentEpisode = active_episodes[env_id]
-            episode._set_rnn_state(agent_id, [c[i] for c in rnn_out_cols])
-            episode._set_last_pi_info(
-                agent_id, {k: v[i]
-                           for k, v in pi_info_cols.items()})
+            if agent_id == 'a':
+                episode._set_rnn_state(agent_id, [c[i*num_agents:(i+1)*num_agents] for c in rnn_out_cols])
+                episode._set_last_pi_info(
+                    agent_id, {k: v[i*num_agents:(i+1)*num_agents]
+                               for k, v in pi_info_cols.items()})
+                if clip_actions:
+                    for agent_idx in range(num_agents):
+                        actions_to_send[env_id][str(agent_idx)] = clip_action(
+                            action[agent_idx], policy.action_space)
+                else:
+                    for agent_idx in range(num_agents):
+                        actions_to_send[env_id][str(agent_id)] = action[agent_idx]
+            else:
+                episode._set_rnn_state(agent_id, [c[i] for c in rnn_out_cols])
+                episode._set_last_pi_info(
+                    agent_id, {k: v[i]
+                               for k, v in pi_info_cols.items()})
+                if clip_actions:
+                    actions_to_send[env_id][agent_id] = clip_action(
+                        action, policy.action_space)
+                else:
+                    actions_to_send[env_id][agent_id] = action
             if env_id in off_policy_actions and \
                     agent_id in off_policy_actions[env_id]:
                 episode._set_last_action(agent_id,
