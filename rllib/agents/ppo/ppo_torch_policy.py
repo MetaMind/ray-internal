@@ -4,7 +4,7 @@ import numpy as np
 import ray
 from ray.rllib.agents.a3c.a3c_torch_policy import apply_grad_clipping
 from ray.rllib.agents.ppo.ppo_tf_policy import postprocess_ppo_gae, \
-    setup_config
+    postprocess_ppo_gae_vectorized, setup_config
 from ray.rllib.evaluation.postprocessing import Postprocessing
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.torch_policy import EntropyCoeffSchedule, \
