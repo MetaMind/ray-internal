@@ -390,7 +390,7 @@ class Trainer(Trainable):
         logdir (str): Directory in which training outputs should be placed.
     """
     # Whether to allow unknown top-level config keys.
-    _allow_unknown_configs = False
+    _allow_unknown_configs = True
 
     # List of top-level keys with value=dict, for which new sub-keys are
     # allowed to be added to the value dict.
