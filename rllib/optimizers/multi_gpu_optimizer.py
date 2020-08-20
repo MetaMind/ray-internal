@@ -198,7 +198,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
-                    num_batches /= self.batch_size_multiplier  # SS**
+                    num_batches = max(1, num_batches // self.batch_size_multiplier)  # SS**
                     permutation = np.random.permutation(num_batches)
                     for batch_index in range(num_batches):
                         batch_fetches = optimizer.optimize(
