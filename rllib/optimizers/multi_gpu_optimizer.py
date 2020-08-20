@@ -46,7 +46,8 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                  train_batch_size=1024,
                  num_gpus=0,
                  standardize_fields=[],
-                 shuffle_sequences=True):
+                 shuffle_sequences=True,
+                 batch_size_multiplier=1):
         """Initialize a synchronous multi-gpu optimizer.
 
         Arguments:
@@ -71,6 +72,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
         self.rollout_fragment_length = rollout_fragment_length
         self.train_batch_size = train_batch_size
         self.shuffle_sequences = shuffle_sequences
+        self.batch_size_multiplier = batch_size_multiplier
         if not num_gpus:
             self.devices = ["/cpu:0"]
         else:
@@ -118,7 +120,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                                 policy._optimizer, self.devices,
                                 [v
                                  for _, v in policy._loss_inputs], rnn_inputs,
-                                self.per_device_batch_size, policy.copy))
+                                self.per_device_batch_size * self.batch_size_multiplier, policy.copy))  # SS**
 
                 self.sess = self.workers.local_worker().tf_sess
                 self.sess.run(tf.global_variables_initializer())
@@ -196,6 +198,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
+                    num_batches /= self.batch_size_multiplier  # SS**
                     permutation = np.random.permutation(num_batches)
                     for batch_index in range(num_batches):
                         batch_fetches = optimizer.optimize(

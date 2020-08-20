@@ -92,7 +92,8 @@ def choose_policy_optimizer(workers, config):
         num_envs_per_worker=config["num_envs_per_worker"],
         train_batch_size=config["train_batch_size"],
         standardize_fields=["advantages"],
-        shuffle_sequences=config["shuffle_sequences"])
+        shuffle_sequences=config["shuffle_sequences"],
+        batch_size_multiplier=config["batch_size_multiplier"])
 
 
 def update_kl(trainer, fetches):
