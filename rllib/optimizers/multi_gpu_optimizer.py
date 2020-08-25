@@ -194,11 +194,10 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 optimizer = self.optimizers[policy_id]
                 num_batches = max(
                     1,
-                    int(tuples_per_device) // int(self.per_device_batch_size))
+                    int(tuples_per_device) // (int(self.per_device_batch_size) * self.batch_size_multiplier))  # SS**
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
-                    num_batches = max(1, num_batches // self.batch_size_multiplier)  # SS**
                     permutation = np.random.permutation(num_batches)
                     for batch_index in range(num_batches):
                         batch_fetches = optimizer.optimize(
