@@ -64,7 +64,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 to normalize
             shuffle_sequences (bool): whether to shuffle the train batch prior
                 to SGD to break up correlations
-            batch_size_multiplier[agent/planner] (int): separate multiplication factors
+            batch_size_multiplier[agent/planner] (float): separate multiplication factors
             for agent and planner sgd batch sizes
         """
         PolicyOptimizer.__init__(self, workers)
