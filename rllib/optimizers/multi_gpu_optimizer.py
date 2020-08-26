@@ -46,7 +46,9 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                  train_batch_size=1024,
                  num_gpus=0,
                  standardize_fields=[],
-                 shuffle_sequences=True):
+                 shuffle_sequences=True,
+                 batch_size_multiplier_agent=1,
+                 batch_size_multiplier_planner=1):
         """Initialize a synchronous multi-gpu optimizer.
 
         Arguments:
@@ -62,6 +64,8 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 to normalize
             shuffle_sequences (bool): whether to shuffle the train batch prior
                 to SGD to break up correlations
+            batch_size_multiplier[agent/planner] (int): separate multiplication factors
+            for agent and planner sgd batch sizes
         """
         PolicyOptimizer.__init__(self, workers)
 
@@ -82,6 +86,9 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
         assert self.batch_size % len(self.devices) == 0
         assert self.batch_size >= len(self.devices), "batch size too small"
         self.per_device_batch_size = int(self.batch_size / len(self.devices))
+        self.policy_specific_per_device_batch_size = \
+            {"a": batch_size_multiplier_agent * self.per_device_batch_size,
+             "p": batch_size_multiplier_planner * self.per_device_batch_size}
         self.sample_timer = TimerStat()
         self.load_timer = TimerStat()
         self.grad_timer = TimerStat()
@@ -118,7 +125,8 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                                 policy._optimizer, self.devices,
                                 [v
                                  for _, v in policy._loss_inputs], rnn_inputs,
-                                self.per_device_batch_size, policy.copy))
+                                self.policy_specific_per_device_batch_size[policy_id],
+                                policy.copy))  # SS**
 
                 self.sess = self.workers.local_worker().tf_sess
                 self.sess.run(tf.global_variables_initializer())
@@ -192,7 +200,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                 optimizer = self.optimizers[policy_id]
                 num_batches = max(
                     1,
-                    int(tuples_per_device) // int(self.per_device_batch_size))
+                    int(tuples_per_device) // int(self.policy_specific_per_device_batch_size[policy_id]))  # SS**
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
@@ -200,7 +208,7 @@ class LocalMultiGPUOptimizer(PolicyOptimizer):
                     for batch_index in range(num_batches):
                         batch_fetches = optimizer.optimize(
                             self.sess, permutation[batch_index] *
-                            self.per_device_batch_size)
+                            self.policy_specific_per_device_batch_size[policy_id])
                         for k, v in batch_fetches[LEARNER_STATS_KEY].items():
                             iter_extra_fetches[k].append(v)
                     logger.debug("{} {}".format(i,
