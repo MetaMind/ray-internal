@@ -106,6 +106,8 @@ class TrainTFMultiGPU:
                  num_envs_per_worker: int,
                  train_batch_size: int,
                  shuffle_sequences: bool,
+                 batch_size_multiplier_agent: float,
+                 batch_size_multiplier_planner: float,
                  policies: List[PolicyID] = frozenset([]),
                  _fake_gpus: bool = False,
                  framework: str = "tf"):
@@ -130,6 +132,10 @@ class TrainTFMultiGPU:
         assert self.batch_size % len(self.devices) == 0
         assert self.batch_size >= len(self.devices), "batch size too small"
         self.per_device_batch_size = int(self.batch_size / len(self.devices))
+        
+        self.policy_specific_per_device_batch_size = \
+            {"a": batch_size_multiplier_agent * self.per_device_batch_size,
+             "p": batch_size_multiplier_planner * self.per_device_batch_size}
 
         # per-GPU graph copies created below must share vars with the policy
         # reuse is set to AUTO_REUSE because Adam nodes are created after
@@ -154,7 +160,7 @@ class TrainTFMultiGPU:
                                 self.devices,
                                 [v for _, v in policy._loss_inputs],
                                 rnn_inputs,
-                                self.per_device_batch_size,
+                                self.policy_specific_per_device_batch_size[policy_id],
                                 policy.copy))
 
                 self.sess = self.workers.local_worker().tf_sess
@@ -201,7 +207,7 @@ class TrainTFMultiGPU:
                 optimizer = self.optimizers[policy_id]
                 num_batches = max(
                     1,
-                    int(tuples_per_device) // int(self.per_device_batch_size))
+                    int(tuples_per_device) // self.policy_specific_per_device_batch_size[policy_id])
                 logger.debug("== sgd epochs for {} ==".format(policy_id))
                 for i in range(self.num_sgd_iter):
                     iter_extra_fetches = defaultdict(list)
@@ -209,7 +215,7 @@ class TrainTFMultiGPU:
                     for batch_index in range(num_batches):
                         batch_fetches = optimizer.optimize(
                             self.sess, permutation[batch_index] *
-                            self.per_device_batch_size)
+                            self.policy_specific_per_device_batch_size[policy_id])
                         for k, v in batch_fetches[LEARNER_STATS_KEY].items():
                             iter_extra_fetches[k].append(v)
                     if logger.getEffectiveLevel() <= logging.DEBUG:

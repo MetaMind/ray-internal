@@ -193,6 +193,8 @@ def execution_plan(workers, config):
                 num_envs_per_worker=config["num_envs_per_worker"],
                 train_batch_size=config["train_batch_size"],
                 shuffle_sequences=config["shuffle_sequences"],
+                batch_size_multiplier_agent=config["batch_size_multiplier_agent"],
+                batch_size_multiplier_planner=config["batch_size_multiplier_planner"],
                 _fake_gpus=config["_fake_gpus"],
                 framework=config.get("framework")))
 
