@@ -285,7 +285,7 @@ COMMON_CONFIG = {
     # GPU-intensive video game), or model inference is unusually expensive.
     "num_gpus_per_worker": 0,
     # A multiplication factor used to scale the batch size in the optimizer.
-    # This is provided for agents and the planner separately so that each entity could
+    # This is provided for the agents and the planner separately so that each entity can
     # have it's own sgd minibatch size. Larger is this number, smaller is the number of
     # batches used for gradient descent
     "batch_size_multiplier_agent": 1,
