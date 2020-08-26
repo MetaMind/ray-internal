@@ -284,9 +284,12 @@ COMMON_CONFIG = {
     # usually needed only if your env itself requires a GPU (i.e., it is a
     # GPU-intensive video game), or model inference is unusually expensive.
     "num_gpus_per_worker": 0,
-    # Batch Size Multiplier - multiplies the effective batch size in the optimizer.
-    # Larger is this number, fewer is the number of batches used for gradient descent
-    "batch_size_multiplier": 1,
+    # A multiplication factor used to scale the batch size in the optimizer.
+    # This is provided for agents and the planner separately so that each entity could
+    # have it's own sgd minibatch size. Larger is this number, smaller is the number of
+    # batches used for gradient descent
+    "batch_size_multiplier_agent": 1,
+    "batch_size_multiplier_planner": 1,
     # Any custom Ray resources to allocate per worker.
     "custom_resources_per_worker": {},
     # Number of CPUs to allocate for the trainer. Note: this only takes effect
