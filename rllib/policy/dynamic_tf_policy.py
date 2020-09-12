@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from ray.util.debug import log_once
 from ray.rllib.models.modelv2 import ModelV2
+from ray.rllib.evaluation.postprocessing import Postprocessing
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.tf_policy import TFPolicy
@@ -371,6 +372,9 @@ class DynamicTFPolicy(TFPolicy):
                 SampleBatch.PREV_ACTIONS: fake_array(self._prev_action_input),
                 SampleBatch.PREV_REWARDS: fake_array(self._prev_reward_input),
             })
+
+        dummy_planner_batch = {Postprocessing.ADVANTAGES: fake_array(self._prev_reward_input)}
+
         state_init = self.get_initial_state()
         state_batches = []
         for i, h in enumerate(state_init):
@@ -381,12 +385,14 @@ class DynamicTFPolicy(TFPolicy):
             dummy_batch["seq_lens"] = np.array([1], dtype=np.int32)
         for k, v in self.extra_compute_action_fetches().items():
             dummy_batch[k] = fake_array(v)
+        dummy_batch["agent_id"] = np.array([1])
 
         # postprocessing might depend on variable init, so run it first here
         self._sess.run(tf1.global_variables_initializer())
 
         postprocessed_batch = self.postprocess_trajectory(
-            SampleBatch(dummy_batch))
+            SampleBatch(dummy_batch),
+            {"p": SampleBatch(dummy_planner_batch)})
 
         # model forward pass for the loss (needed after postprocess to
         # overwrite any tensor state from that call)

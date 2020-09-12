@@ -12,6 +12,7 @@ class Postprocessing:
     """Constant definitions for postprocessing."""
 
     ADVANTAGES = "advantages"
+    PLANNER_ADVANTAGES = "planner_advantages"
     VALUE_TARGETS = "value_targets"
 
 

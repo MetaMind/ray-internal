@@ -106,6 +106,7 @@ def summarize_episodes(
     episode_rewards = []
     episode_lengths = []
     policy_rewards = collections.defaultdict(list)
+    agent_rewards = collections.defaultdict(list)
     custom_metrics = collections.defaultdict(list)
     perf_stats = collections.defaultdict(list)
     hist_stats = collections.defaultdict(list)
@@ -116,7 +117,8 @@ def summarize_episodes(
             custom_metrics[k].append(v)
         for k, v in episode.perf_stats.items():
             perf_stats[k].append(v)
-        for (_, policy_id), reward in episode.agent_rewards.items():
+        for (agent_id, policy_id), reward in episode.agent_rewards.items():
+            agent_rewards[agent_id].append(reward)
             if policy_id != DEFAULT_POLICY_ID:
                 policy_rewards[policy_id].append(reward)
         for k, v in episode.hist_data.items():
@@ -148,6 +150,17 @@ def summarize_episodes(
 
         # Show as histogram distributions.
         hist_stats["policy_{}_reward".format(policy_id)] = rewards
+
+    agent_reward_min = {}
+    agent_reward_mean = {}
+    agent_reward_max = {}
+    for agent_id, rewards in agent_rewards.copy().items():
+        agent_reward_min[agent_id] = np.min(rewards)
+        agent_reward_mean[agent_id] = np.mean(rewards)
+        agent_reward_max[agent_id] = np.max(rewards)
+
+        # Show as histogram distributions.
+        hist_stats["agent_{}_reward".format(agent_id)] = rewards
 
     for k, v_list in custom_metrics.copy().items():
         filt = [v for v in v_list if not np.isnan(v)]
@@ -182,6 +195,9 @@ def summarize_episodes(
         policy_reward_min=policy_reward_min,
         policy_reward_max=policy_reward_max,
         policy_reward_mean=policy_reward_mean,
+        agent_reward_min=agent_reward_min,
+        agent_reward_max=agent_reward_max,
+        agent_reward_mean=agent_reward_mean,
         custom_metrics=dict(custom_metrics),
         hist_stats=dict(hist_stats),
         sampler_perf=dict(perf_stats),
