@@ -44,6 +44,10 @@ def _import_ppo():
     from ray.rllib.agents import ppo
     return ppo.PPOTrainer
 
+def _import_wppo():
+    from ray.rllib.agents import wppo
+    return wppo.WPPOTrainer
+
 
 def _import_es():
     from ray.rllib.agents import es
@@ -106,6 +110,7 @@ ALGORITHMS = {
     "APEX_DDPG": _import_apex_ddpg,
     "TD3": _import_td3,
     "PPO": _import_ppo,
+    "WPPO": _import_wppo,
     "ES": _import_es,
     "ARS": _import_ars,
     "DQN": _import_dqn,

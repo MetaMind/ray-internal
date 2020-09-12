@@ -185,6 +185,7 @@ COMMON_CONFIG: TrainerConfigDict = {
     # Note that evaluation is currently not parallelized, and that for Ape-X
     # metrics are already only reported for the lowest epsilon workers.
     "evaluation_interval": None,
+    "force_evaluation": False,
     # Number of episodes to run per evaluation period. If using multiple
     # evaluation workers, we will run at least this many episodes total.
     "evaluation_num_episodes": 10,
@@ -643,7 +644,7 @@ class Trainer(Trainable):
             self._init(self.config, self.env_creator)
 
             # Evaluation setup.
-            if self.config.get("evaluation_interval"):
+            if self.config.get("evaluation_interval") or self.config.get("force_evaluation"):
                 # Update env_config with evaluation settings:
                 extra_config = copy.deepcopy(self.config["evaluation_config"])
                 # Assert that user has not unset "in_evaluation".
