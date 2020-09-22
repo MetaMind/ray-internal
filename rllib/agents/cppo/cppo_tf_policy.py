@@ -83,7 +83,7 @@ class CPPOLoss:
         curr_entropy = curr_action_dist.entropy()
         self.mean_entropy = reduce_mean_valid(curr_entropy)
 
-        advantages = c_coeff * advantages
+        advantages = cur_c_coeff * advantages
 
         surrogate_loss = tf.minimum(
             advantages * logp_ratio,
