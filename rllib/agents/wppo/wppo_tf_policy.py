@@ -101,7 +101,8 @@ class WPPOLoss:
             planner_advantages * tf.clip_by_value(logp_ratio, 1 - clip_param,
                                           1 + clip_param))
 
-        both_surrogate_loss = planner_surrogate_loss - tf.gather(cur_lambda_coeff, agent_ids) * surrogate_loss
+        lambda_param = tf.gather(cur_lambda_coeff, agent_ids)
+        both_surrogate_loss = (planner_surrogate_loss - lambda_param * surrogate_loss) / (1 + lambda_param)
 
         self.mean_policy_loss = reduce_mean_valid(-surrogate_loss)
         self.mean_adv_policy_loss = reduce_mean_valid(planner_surrogate_loss)
