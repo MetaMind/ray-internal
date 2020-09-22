@@ -48,6 +48,10 @@ def _import_wppo():
     from ray.rllib.agents import wppo
     return wppo.WPPOTrainer
 
+def _import_cppo():
+    from ray.rllib.agents import cppo
+    return cppo.CPPOTrainer
+
 
 def _import_es():
     from ray.rllib.agents import es
@@ -111,6 +115,7 @@ ALGORITHMS = {
     "TD3": _import_td3,
     "PPO": _import_ppo,
     "WPPO": _import_wppo,
+    "CPPO": _import_cppo,
     "ES": _import_es,
     "ARS": _import_ars,
     "DQN": _import_dqn,
