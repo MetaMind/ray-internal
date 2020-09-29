@@ -10,6 +10,7 @@ from ray.rllib.policy.tf_policy_template import build_tf_policy
 from ray.rllib.utils.framework import try_import_tf, get_variable
 from ray.rllib.utils.tf_ops import explained_variance, make_tf_callable
 from ray.rllib.utils.sgd import standardized
+import numpy as np
 
 tf1, tf, tfv = try_import_tf()
 
@@ -215,6 +216,12 @@ def postprocess_wppo_gae(policy,
     planner_batch = other_agent_batches["p"]
     assert "agent_id" in batch
     batch[PLANNER_ADVANTAGES] = standardized(planner_batch[Postprocessing.ADVANTAGES])
+    if len(batch[PLANNER_ADVANTAGES]) != len(batch[Postprocessing.ADVANTAGES]):
+        # If we are longer than advantage
+        batch[PLANNER_ADVANTAGES] = batch[PLANNER_ADVANTAGES][:len(batch[Postprocessing.ADVANTAGES])]
+        # If advantage is longer than us
+        batch[PLANNER_ADVANTAGES] = np.pad(batch[PLANNER_ADVANTAGES], (len(batch[Postprocessing.ADVANTAGES]) - len(batch[PLANNER_ADVANTAGES])))
+
     return batch
 
 
