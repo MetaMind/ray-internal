@@ -213,14 +213,17 @@ def postprocess_wppo_gae(policy,
         policy.config["gamma"],
         policy.config["lambda"],
         use_gae=policy.config["use_gae"])
-    planner_batch = other_agent_batches["p"]
-    assert "agent_id" in batch
-    batch[PLANNER_ADVANTAGES] = standardized(planner_batch[Postprocessing.ADVANTAGES])
-    if len(batch[PLANNER_ADVANTAGES]) != len(batch[Postprocessing.ADVANTAGES]):
-        # If we are longer than advantage
-        batch[PLANNER_ADVANTAGES] = batch[PLANNER_ADVANTAGES][:len(batch[Postprocessing.ADVANTAGES])]
-        # If advantage is longer than us
-        batch[PLANNER_ADVANTAGES] = np.pad(batch[PLANNER_ADVANTAGES], (len(batch[Postprocessing.ADVANTAGES]) - len(batch[PLANNER_ADVANTAGES])))
+    if "p" in other_agent_batches:
+        planner_batch = other_agent_batches["p"]
+        assert "agent_id" in batch
+        batch[PLANNER_ADVANTAGES] = standardized(planner_batch[Postprocessing.ADVANTAGES])
+        if len(batch[PLANNER_ADVANTAGES]) != len(batch[Postprocessing.ADVANTAGES]):
+            # If we are longer than advantage
+            batch[PLANNER_ADVANTAGES] = batch[PLANNER_ADVANTAGES][:len(batch[Postprocessing.ADVANTAGES])]
+            # If advantage is longer than us
+            batch[PLANNER_ADVANTAGES] = np.pad(batch[PLANNER_ADVANTAGES], (0, len(batch[Postprocessing.ADVANTAGES]) - len(batch[PLANNER_ADVANTAGES])))
+    else:
+         batch[PLANNER_ADVANTAGES] = np.zeros_like(batch[Postprocessing.ADVANTAGES])
 
     return batch
 
