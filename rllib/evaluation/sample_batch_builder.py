@@ -181,7 +181,17 @@ class MultiAgentSampleBatchBuilder:
                     pre_batch["rewards"],
                     a_min=-self.clip_rewards,
                     a_max=self.clip_rewards)
-        for agent_id, (_, pre_batch) in pre_batches.items():
+
+        # Is planner an agent?
+        is_planner = "p" in pre_batches
+        if is_planner:
+            agent_ids = [k for k in pre_batches.keys() if k != "p"]
+            agent_ids = ["p"] + agent_ids
+        else:
+            agent_ids = pre_batches.keys()
+
+        for agent_id in agent_ids:
+            (_, pre_batch) = pre_batches[agent_id]
             other_batches = pre_batches.copy()
             del other_batches[agent_id]
             policy = self.policy_map[self.agent_to_policy[agent_id]]
@@ -190,6 +200,12 @@ class MultiAgentSampleBatchBuilder:
                 raise ValueError(
                     "Batches sent to postprocessing must only contain steps "
                     "from a single trajectory.", pre_batch)
+
+            if is_planner and agent_id != "p":
+                other_batches["p"] = post_batches["p"]
+
+            pre_batch["agent_id"] = np.ones_like(pre_batch["dones"]) * (-1 if agent_id == "p" else int(agent_id))
+
             post_batches[agent_id] = policy.postprocess_trajectory(
                 pre_batch, other_batches, episode)
             # Call the Policy's Exploration's postprocess method.
