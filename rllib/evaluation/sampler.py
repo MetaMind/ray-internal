@@ -762,12 +762,9 @@ def _process_policy_eval_results(to_eval, eval_results, active_episodes,
                     agent_id, {k: v[i*num_agents:(i+1)*num_agents]
                                for k, v in pi_info_cols.items()})
                 if clip_actions:
-                    for agent_idx in range(num_agents):
-                        actions_to_send[env_id][str(agent_idx)] = clip_action(
-                            action[agent_idx], policy.action_space)
+                    actions_to_send[env_id][str(agent_id)] = [clip_action(a, policy.action_space) for a in action]
                 else:
-                    for agent_idx in range(num_agents):
-                        actions_to_send[env_id][str(agent_id)] = action[agent_idx]
+                    actions_to_send[env_id][str(agent_id)] = action
             else:
                 episode._set_rnn_state(agent_id, [c[i] for c in rnn_out_cols])
                 episode._set_last_pi_info(
